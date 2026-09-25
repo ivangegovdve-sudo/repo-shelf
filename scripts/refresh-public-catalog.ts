@@ -16,11 +16,21 @@ async function publicRepoNames(): Promise<Set<string>> {
   }
 }
 
+/** Offline alternative when the unauthenticated API is rate limited: one owner/name per line, exported from an authenticated `is:public` search. */
+async function publicRepoNamesFromFile(file: string): Promise<Set<string>> {
+  const lines = (await fs.readFile(file, 'utf8')).split(/\r?\n/).map((line) => line.trim().toLowerCase()).filter(Boolean);
+  if (!lines.every((line) => line.startsWith(`${OWNER}/`))) throw new Error(`${file} must list ${OWNER}/<name> lines only.`);
+  return new Set(lines);
+}
+
 async function main(): Promise<void> {
-  const input = path.resolve(process.argv[2] ?? '../repoindex-work/catalog.json');
-  const output = path.resolve(process.argv[3] ?? 'data/catalog.public.json');
+  const args = process.argv.slice(2);
+  const namesFlag = args.indexOf('--public-names');
+  const namesFile = namesFlag >= 0 ? args.splice(namesFlag, 2)[1] : null;
+  const input = path.resolve(args[0] ?? '../repoindex-work/catalog.json');
+  const output = path.resolve(args[1] ?? 'data/catalog.public.json');
   const source = parseCatalog(JSON.parse(await fs.readFile(input, 'utf8')) as unknown);
-  const publicNames = await publicRepoNames();
+  const publicNames = namesFile ? await publicRepoNamesFromFile(path.resolve(namesFile)) : await publicRepoNames();
   const repos = source.repos.filter((repo) => publicNames.has(repo.full_name.toLowerCase()));
   if (repos.length === 0) throw new Error('Public filtering produced an empty catalog. Refusing to overwrite output.');
   const filtered = {

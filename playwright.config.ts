@@ -6,6 +6,8 @@ import path from 'node:path';
 export const E2E_ROOT = path.join(os.tmpdir(), 'repo-shelf-e2e');
 export const E2E_CONFIG = path.join(E2E_ROOT, 'shelf.config.json');
 export const E2E_CACHE = path.join(E2E_ROOT, '.cache');
+/** A path that never exists: the fixture API must show only the fixture shelves, not the bundled catalog. */
+export const E2E_NO_CATALOG = path.join(E2E_ROOT, 'no-catalog.json');
 export const API_PORT = 4879;
 export const WEB_PORT = 5179;
 
@@ -24,7 +26,7 @@ export default defineConfig({
   webServer: [
     {
       // Fixture is (re)built by the same command so the API can never boot against a stale one.
-      command: `npx tsx tests/e2e/global-setup.ts --run && npx cross-env SHELF_CONFIG="${E2E_CONFIG}" SHELF_CACHE="${E2E_CACHE}" SHELF_PORT=${API_PORT} npx tsx server/index.ts`,
+      command: `npx tsx tests/e2e/global-setup.ts --run && npx cross-env SHELF_CONFIG="${E2E_CONFIG}" SHELF_CACHE="${E2E_CACHE}" SHELF_CATALOG="${E2E_NO_CATALOG}" SHELF_PORT=${API_PORT} npx tsx server/index.ts`,
       url: `http://127.0.0.1:${API_PORT}/api/state`,
       reuseExistingServer: false,
       timeout: 60_000,

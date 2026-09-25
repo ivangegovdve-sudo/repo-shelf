@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { catalogToState, parseCatalog, type CatalogDocument, type CatalogRepo } from '../../server/catalog';
+import { catalogToState, mergeCatalog, parseCatalog, type CatalogDocument, type CatalogRepo } from '../../server/catalog';
+import type { Repo, Shelf } from '../../server/types';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -78,5 +79,53 @@ describe('bundled public catalog', () => {
     expect(state.repos.filter((repo) => repo.catalog?.kind === 'reference-copy').length).toBeGreaterThan(1_000);
     expect(state.repos.filter((repo) => repo.catalog?.kind === 'original').length).toBeGreaterThan(0);
     expect(state.repos.every((repo) => state.shelves.some((shelf) => shelf.id === repo.shelfId))).toBe(true);
+  });
+});
+
+describe('mergeCatalog', () => {
+  const local = (over: Partial<Repo>): Repo => ({
+    ...catalogToState(catalog([item()])).repos[0],
+    catalog: undefined, virtual: false, shelfId: 'disk', path: '/projects/voice-tool', ...over,
+  });
+  const diskShelf: Shelf = { id: 'disk', label: 'Projects', path: '/projects', kind: 'disk', hidden: false, repoCount: 1 };
+
+  it('keeps an on-disk clone of a cataloged repo, and drops only virtual GitHub duplicates', () => {
+    const cat = catalogToState(catalog([item()]));
+    const clone = local({ id: 'clone', repoSlug: 'ivangegovdve-sudo/voice-tool' });
+    const ghDuplicate = local({ id: 'gh', virtual: true, path: '', shelfId: 'gh', repoSlug: 'IvanGegovDVE-sudo/Voice-Tool' });
+    const other = local({ id: 'other', repoSlug: 'someone/else' });
+    const merged = mergeCatalog(cat, [diskShelf], [clone, ghDuplicate, other]);
+    expect(merged.repos.map((r) => r.id)).toEqual([cat.repos[0].id, 'clone', 'other']);
+    expect(merged.shelves.map((s) => s.id)).toEqual([...cat.shelves.map((s) => s.id), 'disk']);
+    expect(mergeCatalog(null, [diskShelf], [clone])).toEqual({ shelves: [diskShelf], repos: [clone] });
+  });
+
+  it('folds a GitHub-shelf duplicate’s live state into the catalog book; a link duplicate is just dropped', () => {
+    const cat = catalogToState(catalog([item(), item({ name: 'reader', full_name: 'ivangegovdve-sudo/reader' })]));
+    const ghShelf: Shelf = { id: 'gh', label: 'GitHub', path: null, kind: 'github', hidden: false, repoCount: 1 };
+    const linkShelf: Shelf = { id: 'links', label: 'Reads', path: null, kind: 'links', hidden: false, repoCount: 1 };
+    const live = local({ id: 'gh-voice', virtual: true, path: '', shelfId: 'gh', visibility: 'private', archived: true, createdAt: '2024-01-02T00:00:00Z' });
+    const link = local({ id: 'link-reader', virtual: true, path: '', shelfId: 'links', repoSlug: 'ivangegovdve-sudo/reader', visibility: null });
+    const merged = mergeCatalog(cat, [ghShelf, linkShelf], [live, link]);
+    expect(merged.repos.map((r) => r.id)).toEqual(cat.repos.map((r) => r.id));
+    const [voice, reader] = merged.repos;
+    expect(voice).toMatchObject({ visibility: 'private', archived: true, createdAt: '2024-01-02T00:00:00Z' });
+    expect(voice.catalog).toMatchObject({ kind: 'original', githubShelfId: 'gh' });
+    expect(reader).toEqual(cat.repos[1]);
+  });
+
+  it('keeps a guide book that shares a catalog slug: its documentation pages have nowhere else to live', () => {
+    const cat = catalogToState(catalog([item()]));
+    const guide = local({ id: 'guide', virtual: true, path: '', shelfId: 'links', doc: 'https://github.com/ivangegovdve-sudo/voice-tool/tree/main/docs' });
+    expect(mergeCatalog(cat, [], [guide]).repos.map((r) => r.id)).toEqual([cat.repos[0].id, 'guide']);
+  });
+
+  it('leaves out catalog repos deleted on GitHub, and bays they emptied', () => {
+    const cat = catalogToState(catalog([item(), item({ name: 'reader', full_name: 'ivangegovdve-sudo/reader', topics: ['ebook'], summary: 'Reads ebooks aloud.' })]));
+    const merged = mergeCatalog(cat, [], [], new Set(['ivangegovdve-sudo/voice-tool']));
+    expect(merged.repos.map((r) => r.repoSlug)).toEqual(['ivangegovdve-sudo/reader']);
+    const total = merged.shelves.reduce((n, s) => n + s.repoCount, 0);
+    expect(total).toBe(1);
+    expect(merged.shelves.every((s) => s.repoCount > 0)).toBe(true);
   });
 });

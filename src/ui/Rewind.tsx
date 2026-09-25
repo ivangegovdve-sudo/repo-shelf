@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useShelf } from '../store';
+import { createdBy, rewindSpan } from '../derive';
 
 const DURATION_MS = 7000;
 
@@ -12,13 +13,13 @@ export function RewindOverlay() {
 
   useEffect(() => {
     if (!playing) return;
-    const dates = repos.map((r) => (r.createdAt ? new Date(r.createdAt).getTime() : NaN)).filter((t) => Number.isFinite(t));
-    if (!dates.length) {
+    const span = rewindSpan(repos);
+    if (!span) {
       useShelf.getState().toast('error', 'No creation dates yet. Rescan once so git can report first commits.');
       useShelf.setState({ rewindPlaying: false, timeline: null });
       return;
     }
-    const start = Math.min(...dates) - 24 * 3600 * 1000;
+    const start = span.start;
     const end = Date.now();
     const t0 = performance.now();
     const tick = (now: number) => {
@@ -35,7 +36,7 @@ export function RewindOverlay() {
   }, [playing, repos]);
 
   if (!playing || timeline === null) return null;
-  const count = repos.filter((r) => r.createdAt && new Date(r.createdAt).getTime() <= timeline).length;
+  const count = createdBy(repos, timeline);
   return (
     <div className="rewind" aria-live="polite">
       <div className="rewind-year">{new Date(timeline).getFullYear()}</div>

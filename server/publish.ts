@@ -77,7 +77,10 @@ export async function buildStaticSite(state: AppState, opts: BuildOptions): Prom
 
   const pages: Record<string, RepoPages> = {};
   if (opts.pagesFor) {
+    // Catalog books carry their capability card instead of pages. Fetching README, commits and files
+    // for each of them would cost about six GitHub API calls per book, over 7,000 for the bundled catalog.
     for (const r of repos) {
+      if (r.catalog) continue;
       try {
         const p = await opts.pagesFor(r);
         if (p) pages[r.id] = { ...p, readme: p.readme ? p.readme.slice(0, 30_000) : null, commits: p.commits.slice(0, 20), files: p.files.slice(0, 60) };

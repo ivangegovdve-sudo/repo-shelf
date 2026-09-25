@@ -66,6 +66,11 @@ export interface CatalogMeta {
   cardGeneratedAt: string;
   /** Active when last push was within one year of catalog generation. */
   alive: boolean;
+  /**
+   * Set when the same repo is also listed on one of the user's GitHub shelves. Its live visibility,
+   * archive state and metadata are folded into this book, and it can be managed like that GitHub book.
+   */
+  githubShelfId?: string;
 }
 
 export interface Repo {

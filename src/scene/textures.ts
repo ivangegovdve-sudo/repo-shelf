@@ -9,10 +9,10 @@ type DetailEntry = { key: string; cover: THREE.CanvasTexture; page: THREE.Canvas
 const spineCache = new Map<string, SpineEntry>();
 const detailCache = new Map<string, DetailEntry>();
 
-/** Hard caps keep the shelf usable on integrated GPUs. Full covers exist only for active books. */
-export const BOOK_TEXTURE_BUDGET = { spines: 180, details: 8 } as const;
+/** Large spines, covers and first pages exist only for the open book and the dragged one; the wall draws from the spine atlas. */
+export const BOOK_TEXTURE_BUDGET = { spines: 8, details: 6 } as const;
 
-function visualKey(r: Repo, staleDays: number): string {
+export function visualKey(r: Repo, staleDays: number): string {
   return [r.name, languageOf(r), r.dirtyCount > 0, r.github?.stars ?? 0, r.virtual ? 'link' : isStale(r, staleDays), r.github?.description ?? '', r.visibility, r.archived, r.catalog?.kind, r.catalog?.upstream, r.catalog?.cardStale, r.catalog?.verificationStatus, r.catalog?.alive, r.lastCommitAt].join('|');
 }
 
@@ -553,6 +553,19 @@ function drawPage(r: Repo): HTMLCanvasElement {
     ctx.fillText(r.catalog ? "Original repository by Ivan Gegov" : 'README, commits, issues and pull requests are on the pages to the right', W / 2, H - 88);
   }
   return canvas;
+}
+
+function textureBytes(t: THREE.Texture): number {
+  const image = t.image as { width: number; height: number };
+  return image.width * image.height * 4 * (4 / 3);
+}
+
+/** Bytes held by the open-book caches (large spines, covers, first pages), mipmaps included. */
+export function textureCacheStats(): { spines: number; details: number; bytes: number } {
+  let bytes = 0;
+  for (const e of spineCache.values()) bytes += textureBytes(e.texture);
+  for (const e of detailCache.values()) bytes += textureBytes(e.cover) + textureBytes(e.page);
+  return { spines: spineCache.size, details: detailCache.size, bytes };
 }
 
 function makeTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {

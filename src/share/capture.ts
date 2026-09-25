@@ -1,7 +1,8 @@
 import { GIFEncoder, quantize, applyPalette } from 'gifenc';
 import { useShelf } from '../store';
-import { languageCounts } from '../derive';
+import { createdBy, languageCounts, rewindSpan } from '../derive';
 import { themeById } from '../themes';
+import { useWall } from '../scene/wallStore';
 
 interface R3fHandle {
   gl: { domElement: HTMLCanvasElement; render: (scene: unknown, camera: unknown) => void };
@@ -96,25 +97,19 @@ export function composeFrame(width: number, caption: Caption, extra?: string): H
   return out;
 }
 
-/** Zoom out so every shelf is in frame; returns a function that restores the previous view. */
+/** Zoom out so the whole wall is in frame; returns a function that restores the previous view. */
 async function frameWholeCase(h: R3fHandle): Promise<() => Promise<void>> {
   const st = useShelf.getState();
-  const before = { zoom: st.zoom, orbit: { ...st.orbit }, scrollRow: st.scrollRow, selected: st.selectedRepoId, focus: st.focus };
-  const n = Math.max(1, st.shelves.length);
+  const wall = useWall.getState();
+  const before = { target: { ...wall.target }, selected: st.selectedRepoId };
   st.setInstant(true);
   st.select(null);
-  st.setFocus(null);
-  st.setScrollRow(0);
-  // 1.7 rows' worth of zoom per shelf leaves a margin above the crown and below the base
-  st.setZoom(Math.min(1, 1.7 / n));
+  wall.frameAll();
   await settle(h, 3);
   return async () => {
     const s = useShelf.getState();
     s.setInstant(false);
-    s.setZoom(before.zoom);
-    s.setOrbit(before.orbit.yaw, before.orbit.pitch);
-    s.setScrollRow(before.scrollRow);
-    s.setFocus(before.focus);
+    useWall.getState().setTarget(before.target);
     if (before.selected) s.select(before.selected);
     await settle(h, 2);
     h.invalidate();
@@ -155,27 +150,36 @@ async function encodeGif(frames: HTMLCanvasElement[], delayMs: number, onProgres
   return gif.bytes();
 }
 
-/** Orbit the bookcase from left to right and back, captioned. */
-export async function orbitGif(opts: GifOptions = {}): Promise<Uint8Array> {
+/** Glide along the whole wall and back, captioned. */
+export async function panGif(opts: GifOptions = {}): Promise<Uint8Array> {
   const width = opts.width ?? 720;
   const n = opts.frames ?? 40;
   const delay = opts.delayMs ?? 70;
   const h = handle();
-  const restore = await frameWholeCase(h);
+  const st = useShelf.getState();
+  const wall = useWall.getState();
+  const before = { ...wall.target };
   const caption = shelfCaption();
   const frames: HTMLCanvasElement[] = [];
+  st.setInstant(true);
   try {
+    const layout = wall.layout;
+    const zoom = 0.6;
+    const halfW = wall.size.width / 2 / zoom;
+    const from = halfW;
+    const to = Math.max(from, (layout?.width ?? 0) - halfW);
     for (let i = 0; i < n; i++) {
-      const t = i / n;
-      const yaw = Math.sin(t * Math.PI * 2) * 0.55; // ±31°
-      const pitch = Math.cos(t * Math.PI * 2) * 0.08 + 0.05;
-      useShelf.getState().setOrbit(yaw, pitch);
-      await settle(h, 2);
+      const t = (1 - Math.cos((i / n) * Math.PI * 2)) / 2;
+      useWall.getState().setTarget({ zoom, x: from + (to - from) * t, y: (layout?.height ?? 0) / 2 });
+      await settle(h, 3);
       frames.push(composeFrame(width, caption));
       opts.onProgress?.(i + 1, n * 2);
     }
   } finally {
-    await restore();
+    useShelf.getState().setInstant(false);
+    useWall.getState().setTarget(before);
+    await settle(h, 2);
+    h.invalidate();
   }
   return encodeGif(frames, delay, (i, total) => opts.onProgress?.(n + i, total + n));
 }
@@ -187,9 +191,9 @@ export async function rewindGif(opts: GifOptions = {}): Promise<Uint8Array> {
   const delay = opts.delayMs ?? 90;
   const h = handle();
   const st = useShelf.getState();
-  const dates = st.repos.map((r) => (r.createdAt ? new Date(r.createdAt).getTime() : NaN)).filter((t) => Number.isFinite(t));
-  if (!dates.length) throw new Error('No creation dates yet. Rescan once so git can report first commits.');
-  const start = Math.min(...dates) - 24 * 3600 * 1000;
+  const span = rewindSpan(st.repos);
+  if (!span) throw new Error('No creation dates yet. Rescan once so git can report first commits.');
+  const start = span.start;
   const end = Date.now();
   const caption = shelfCaption();
   const frames: HTMLCanvasElement[] = [];
@@ -201,7 +205,7 @@ export async function rewindGif(opts: GifOptions = {}): Promise<Uint8Array> {
       const cursor = start + (end - start) * eased;
       useShelf.getState().setTimeline(cursor);
       await settle(h, 2);
-      const count = st.repos.filter((r) => r.createdAt && new Date(r.createdAt).getTime() <= cursor).length;
+      const count = createdBy(st.repos, cursor);
       const when = new Date(cursor);
       frames.push(composeFrame(width, caption, `${when.toLocaleString('en', { month: 'short' })} ${when.getFullYear()} · ${count} repos`));
       opts.onProgress?.(i + 1, n * 2);

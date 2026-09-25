@@ -12,10 +12,14 @@ import {
   displayName,
   languageCounts,
   languageOf,
+  filterChips,
   MIN_HEIGHT,
   MAX_HEIGHT,
   MIN_THICKNESS,
   MAX_THICKNESS,
+  createdBy,
+  notYetCreated,
+  rewindSpan,
 } from '../src/derive';
 import type { Repo } from '../src/types';
 
@@ -186,5 +190,55 @@ describe('formatting', () => {
       { language: 'Go', count: 1 },
       { language: 'Python', count: 1 },
     ]);
+  });
+});
+
+describe('filterChips', () => {
+  const cat = (kind: NonNullable<Repo['catalog']>['kind'], language = 'Python') =>
+    repo({
+      id: `c-${kind}-${language}`, virtual: true, languageGuess: language,
+      catalog: {
+        kind, upstream: kind === 'original' ? null : 'up/x', commitsAhead: 0, repoUrl: 'https://github.com/ivan/x', cardStale: false,
+        verificationStatus: 'verified', confidence: 'high', cardGeneratedAt: '2026-09-20T00:00:00Z', alive: true,
+      },
+    });
+  const keys = (rs: Repo[]) => filterChips(rs).map((c) => c.key);
+
+  it('offers only the edition filters on a catalog-only shelf', () => {
+    expect(keys([cat('original'), cat('reference-copy')])).toEqual(['all', 'originals', 'authored-fork', 'reference-copy', 'card-stale', 'unverified']);
+  });
+
+  it('keeps the folder-repo filters when the catalog sits beside local shelves', () => {
+    const mixed = [cat('original', 'Python'), cat('reference-copy', 'Python'), repo({ id: 'a', languageGuess: 'Python' }), repo({ id: 'b', languageGuess: 'Rust', visibility: 'private' })];
+    const chips = filterChips(mixed);
+    expect(chips.map((c) => c.key)).toEqual(['all', 'originals', 'authored-fork', 'reference-copy', 'card-stale', 'unverified', 'lang:Python', 'lang:Rust', 'remote', 'dirty', 'stale', 'public', 'private']);
+    // A language chip counts every book its filter will show, catalog books included.
+    expect(chips.find((c) => c.key === 'lang:Python')?.count).toBe(mixed.filter((r) => matches(r, '', 'lang:Python', 'all', 90, NOW)).length);
+  });
+
+  it('matches the folder-only toolbar when there is no catalog', () => {
+    expect(keys([repo({ id: 'a' })])).toEqual(['all', 'lang:Python', 'remote', 'dirty', 'stale']);
+  });
+});
+
+describe('rewind with undated books', () => {
+  const dated = (id: string, createdAt: string) => repo({ id, name: id, createdAt });
+  const undated = repo({ id: 'catalog-book', name: 'catalog-book', createdAt: null });
+  const repos = [dated('a', '2021-03-01T00:00:00Z'), dated('b', '2023-06-01T00:00:00Z'), undated];
+
+  it('starts a day before the first dated repo and replays only dated ones', () => {
+    expect(rewindSpan(repos)).toEqual({ start: Date.parse('2021-03-01T00:00:00Z') - 24 * 3600 * 1000, dated: 2 });
+    expect(createdBy(repos, Date.parse('2022-01-01T00:00:00Z'))).toBe(1);
+    expect(createdBy(repos, Date.now())).toBe(2);
+  });
+
+  it('keeps undated books on the shelf for the whole rewind instead of hiding them', () => {
+    expect(notYetCreated(undated, Date.parse('2000-01-01T00:00:00Z'))).toBe(false);
+    expect(notYetCreated(repos[1], Date.parse('2022-01-01T00:00:00Z'))).toBe(true);
+    expect(notYetCreated(repos[1], Date.parse('2024-01-01T00:00:00Z'))).toBe(false);
+  });
+
+  it('has nothing to replay when no book is dated, as on a catalog-only shelf', () => {
+    expect(rewindSpan([undated, repo({ id: 'bad', createdAt: 'not a date' })])).toBeNull();
   });
 });

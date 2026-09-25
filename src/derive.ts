@@ -75,6 +75,24 @@ export function isStale(r: Repo, staleAfterDays: number, now: Date = new Date())
   return ms > staleAfterDays * 24 * 3600 * 1000;
 }
 
+/** Who wrote a catalog book, read from its spine: Ivan's original, a fork he changed, or an untouched reference copy. */
+export type Edition = 'original' | 'adapted' | 'reference' | 'plain';
+
+export function editionOf(r: Repo): Edition {
+  const kind = r.catalog?.kind;
+  if (kind === 'original') return 'original';
+  if (kind === 'authored-fork') return 'adapted';
+  if (kind === 'reference-copy') return 'reference';
+  return 'plain';
+}
+
+const EDITION_RANK: Record<Edition, number> = { original: 0, adapted: 1, plain: 2, reference: 3 };
+
+/** Shelf order inside one category: Ivan's own work first, reference copies last, then by name. */
+export function compareOnShelf(a: Repo, b: Repo): number {
+  return EDITION_RANK[editionOf(a)] - EDITION_RANK[editionOf(b)] || a.name.localeCompare(b.name);
+}
+
 export function hasGoldBand(r: Repo): boolean {
   return (r.github?.stars ?? 0) > 0;
 }
@@ -135,6 +153,44 @@ export function matches(
   return q.split(/\s+/).every((term) => hay.includes(term));
 }
 
+/** When a repo was created, for rewind; null when unknown (catalog books carry no creation date). */
+export function createdTime(r: Repo): number | null {
+  const t = r.createdAt ? new Date(r.createdAt).getTime() : NaN;
+  return Number.isFinite(t) ? t : null;
+}
+
+/**
+ * Where a rewind starts (a day before the first dated repo) and how many repos it replays.
+ * Undated repos sit the rewind out: they stay on the shelf and are not counted. Null when nothing is dated.
+ */
+export function rewindSpan(repos: Repo[]): { start: number; dated: number } | null {
+  let first = Infinity;
+  let dated = 0;
+  for (const r of repos) {
+    const t = createdTime(r);
+    if (t === null) continue;
+    dated++;
+    if (t < first) first = t;
+  }
+  return dated ? { start: first - 24 * 3600 * 1000, dated } : null;
+}
+
+/** Whether a repo is still to come at this point of the rewind. Undated repos never are. */
+export function notYetCreated(r: Repo, timeline: number): boolean {
+  const t = createdTime(r);
+  return t !== null && t > timeline;
+}
+
+/** Repos a rewind has brought onto the shelf by this point. */
+export function createdBy(repos: Repo[], timeline: number): number {
+  let n = 0;
+  for (const r of repos) {
+    const t = createdTime(r);
+    if (t !== null && t <= timeline) n++;
+  }
+  return n;
+}
+
 export function relativeTime(iso: string | null, now: Date = new Date()): string {
   if (!iso) return 'never';
   const then = new Date(iso).getTime();
@@ -192,4 +248,41 @@ export function languageCounts(repos: Repo[]): { language: string; count: number
   return [...m.entries()]
     .map(([language, count]) => ({ language, count }))
     .sort((a, b) => b.count - a.count || a.language.localeCompare(b.language));
+}
+
+export interface FilterChip {
+  key: Filter;
+  label: string;
+  count?: number;
+  edition?: 'original' | 'adapted' | 'reference';
+}
+
+/**
+ * Toolbar filters. The bundled catalog sits beside folder and GitHub shelves, so when both kinds
+ * of book are present both sets of filters are offered. Counts are what the filter will show.
+ */
+export function filterChips(repos: Repo[]): FilterChip[] {
+  const catalog = repos.some((r) => r.catalog);
+  const local = repos.filter((r) => !r.catalog);
+  const count = (pred: (r: Repo) => boolean) => repos.filter(pred).length;
+  const chips: FilterChip[] = [{ key: 'all', label: local.length ? 'All repos' : 'All', count: repos.length }];
+  if (catalog) {
+    chips.push(
+      { key: 'originals', label: 'Originals', count: count((r) => r.catalog?.kind === 'original'), edition: 'original' },
+      { key: 'authored-fork', label: 'Adapted forks', count: count((r) => r.catalog?.kind === 'authored-fork'), edition: 'adapted' },
+      { key: 'reference-copy', label: 'Reference copies', count: count((r) => r.catalog?.kind === 'reference-copy'), edition: 'reference' },
+      { key: 'card-stale', label: 'Stale cards', count: count((r) => Boolean(r.catalog?.cardStale)) },
+      { key: 'unverified', label: 'Unverified', count: count((r) => r.catalog?.verificationStatus === 'unverified') },
+    );
+  }
+  if (local.length) {
+    // Languages are picked from the local repos, but counted over every book the filter will show.
+    for (const { language } of languageCounts(local).slice(0, catalog ? 4 : 6)) {
+      chips.push({ key: `lang:${language}`, label: language, count: count((r) => languageOf(r) === language) });
+    }
+    chips.push({ key: 'remote', label: 'Has remote' }, { key: 'dirty', label: 'Dirty' }, { key: 'stale', label: 'Stale' });
+    if (local.some((r) => r.visibility)) chips.push({ key: 'public', label: 'Public' }, { key: 'private', label: 'Private' });
+    if (local.some((r) => r.archived)) chips.push({ key: 'archived', label: 'Archived' });
+  }
+  return chips;
 }
