@@ -25,6 +25,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # createRepo / publishSite tests commit with real git; the runner has no identity (same step as ci.yml).
+      - run: git config --global user.email ci@example.com && git config --global user.name CI
       - run: npm ci
       - run: npm run typecheck
       - run: npm test

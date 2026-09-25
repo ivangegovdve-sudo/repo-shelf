@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Repo } from '../src/types';
 import { EDITION_CLOTH, EDITION_INK, contrastRatio, hueOf, luminance, spineStyle } from '../src/scene/spineStyle';
-import { WALL, spineSize, wallMetrics } from '../src/scene/wall';
+import { WALL, spineSize, wallMetrics } from '../src/scene/wallLayout';
 
 type Kind = NonNullable<Repo['catalog']>['kind'];
 

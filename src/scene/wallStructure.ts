@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { WALL, rowBaseY, type WallLayout } from './wall';
+import { WALL, rowBaseY, type WallLayout } from './wallLayout';
 import type { CaseStyle } from '../store';
 
 /** Board with wood grain in world space, so a 1,500 px plank is not one stretched texture. */

@@ -23,7 +23,7 @@ Run `npm test` and `npm run typecheck` before you consider a task done. Add test
 
 - `server/` Node API. `scanner.ts` (find repos, read git), `github.ts` (`gh` enrichment, cached), `actions.ts` (move/rename/mkdir/open), `pathguard.ts` (all path checks), `app.ts` (routes, SSE), `config.ts` (`shelf.config.json`).
 - `src/` UI. `store.ts` is the single app store. `derive.ts` holds pure functions (book size/color, filters, `displayName`, `editionOf`, `compareOnShelf`). `themes.ts` defines color themes for page + scene. `scene/` is the 3D spine-out wall:
-  - `wall.ts`: pure layout of bays, rows and spines, plus picking and keyboard steps.
+  - `wallLayout.ts`: pure layout of bays, rows and spines, plus picking and keyboard steps.
   - `spineStyle.ts`: how the edition shows on a spine.
   - `spineAtlas.ts`: lazy, capped texture atlas of lettered spines.
   - `spineField.ts`: instanced spine meshes.

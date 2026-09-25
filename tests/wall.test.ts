@@ -3,7 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { catalogToState } from '../server/catalog';
 import type { Repo, Shelf } from '../src/types';
-import { WALL, bayAt, layoutWall, rowAt, spineAt, spinesWithin, stepSpine, wallMetrics, type WallLayout } from '../src/scene/wall';
+import { WALL, bayAt, layoutWall, rowAt, spineAt, spinesWithin, stepSpine, wallMetrics, type WallLayout } from '../src/scene/wallLayout';
 
 const state = catalogToState(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'catalog.public.json'), 'utf8')));
 

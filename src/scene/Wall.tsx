@@ -6,7 +6,7 @@ import { matches } from '../derive';
 import { themeById } from '../themes';
 import type { Repo } from '../types';
 import { backPanelTexture, bookTextures, sideColor, textureCacheStats, woodTexture } from './textures';
-import { WALL, bayAt, layoutWall, spineAt, stepSpine, wallMetrics, type WallLayout, type WallStep } from './wall';
+import { WALL, bayAt, layoutWall, spineAt, stepSpine, wallMetrics, type WallLayout, type WallStep } from './wallLayout';
 import { buildStructure, shadeTexture } from './wallStructure';
 import { PULL, SpineField } from './spineField';
 import { SPINE_FONT } from './spineAtlas';

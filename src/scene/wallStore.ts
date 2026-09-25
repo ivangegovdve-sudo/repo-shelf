@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { WallLayout } from './wall';
+import type { WallLayout } from './wallLayout';
 
 export const ZOOM_MIN = 0.2;
 export const ZOOM_MAX = 3;

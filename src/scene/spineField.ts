@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { SpineAtlas, SPINE_ATLAS, type AtlasEntry, type AtlasPage } from './spineAtlas';
 import { spineStyle } from './spineStyle';
-import { WALL, type WallLayout } from './wall';
+import { WALL, type WallLayout } from './wallLayout';
 
 /** How far a spine slides toward the reader, in CSS px. */
 export const PULL = { focus: 10, hover: 20, selected: 36, drop: 0 } as const;
