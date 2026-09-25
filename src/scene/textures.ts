@@ -3,8 +3,14 @@ import type { Repo } from '../types';
 import { bookColor, displayName, hasGoldBand, hasRedTab, isStale, languageOf } from '../derive';
 import type { Theme } from '../themes';
 
-const cache = new Map<string, { key: string; spine: THREE.CanvasTexture; cover: THREE.CanvasTexture; page: THREE.CanvasTexture }>();
-const MAX_BOOK_TEXTURES = 240;
+type SpineEntry = { key: string; texture: THREE.CanvasTexture };
+type DetailEntry = { key: string; cover: THREE.CanvasTexture; page: THREE.CanvasTexture };
+
+const spineCache = new Map<string, SpineEntry>();
+const detailCache = new Map<string, DetailEntry>();
+
+/** Hard caps keep the shelf usable on integrated GPUs. Full covers exist only for active books. */
+export const BOOK_TEXTURE_BUDGET = { spines: 180, details: 8 } as const;
 
 function visualKey(r: Repo, staleDays: number): string {
   return [r.name, languageOf(r), r.dirtyCount > 0, r.github?.stars ?? 0, r.virtual ? 'link' : isStale(r, staleDays), r.github?.description ?? '', r.visibility, r.archived, r.catalog?.kind, r.catalog?.upstream, r.catalog?.cardStale, r.catalog?.verificationStatus, r.catalog?.alive, r.lastCommitAt].join('|');
@@ -559,31 +565,59 @@ function makeTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
   return t;
 }
 
-export function bookTextures(r: Repo, staleDays: number): { spine: THREE.CanvasTexture; cover: THREE.CanvasTexture; page: THREE.CanvasTexture } {
-  const key = visualKey(r, staleDays);
-  const hit = cache.get(r.id);
-  if (hit && hit.key === key) {
-    cache.delete(r.id);
-    cache.set(r.id, hit);
-    return hit;
+function touch<T>(cache: Map<string, T>, id: string, value: T): T {
+  cache.delete(id);
+  cache.set(id, value);
+  return value;
+}
+
+function trimSpines(currentId: string): void {
+  while (spineCache.size > BOOK_TEXTURE_BUDGET.spines) {
+    const oldestId = spineCache.keys().next().value as string | undefined;
+    if (!oldestId || oldestId === currentId) break;
+    spineCache.get(oldestId)?.texture.dispose();
+    spineCache.delete(oldestId);
   }
-  if (hit) {
-    hit.spine.dispose();
-    hit.cover.dispose();
-    hit.page.dispose();
-  }
-  const entry = { key, spine: makeTexture(drawSpine(r, staleDays)), cover: makeTexture(drawCover(r, staleDays)), page: makeTexture(drawPage(r)) };
-  cache.set(r.id, entry);
-  while (cache.size > MAX_BOOK_TEXTURES) {
-    const oldestId = cache.keys().next().value as string | undefined;
-    if (!oldestId || oldestId === r.id) break;
-    const oldest = cache.get(oldestId);
-    cache.delete(oldestId);
-    oldest?.spine.dispose();
+}
+
+function trimDetails(currentId: string): void {
+  while (detailCache.size > BOOK_TEXTURE_BUDGET.details) {
+    const oldestId = detailCache.keys().next().value as string | undefined;
+    if (!oldestId || oldestId === currentId) break;
+    const oldest = detailCache.get(oldestId);
     oldest?.cover.dispose();
     oldest?.page.dispose();
+    detailCache.delete(oldestId);
   }
-  return entry;
+}
+
+export function bookTextures(
+  r: Repo,
+  staleDays: number,
+  detailed = false,
+): { spine: THREE.CanvasTexture; cover: THREE.CanvasTexture | null; page: THREE.CanvasTexture | null } {
+  const key = visualKey(r, staleDays);
+  let spine = spineCache.get(r.id);
+  if (spine?.key === key) {
+    touch(spineCache, r.id, spine);
+  } else {
+    spine?.texture.dispose();
+    spine = touch(spineCache, r.id, { key, texture: makeTexture(drawSpine(r, staleDays)) });
+    trimSpines(r.id);
+  }
+
+  if (!detailed) return { spine: spine.texture, cover: null, page: null };
+
+  let detail = detailCache.get(r.id);
+  if (detail?.key === key) {
+    touch(detailCache, r.id, detail);
+  } else {
+    detail?.cover.dispose();
+    detail?.page.dispose();
+    detail = touch(detailCache, r.id, { key, cover: makeTexture(drawCover(r, staleDays)), page: makeTexture(drawPage(r)) });
+    trimDetails(r.id);
+  }
+  return { spine: spine.texture, cover: detail.cover, page: detail.page };
 }
 
 export function sideColor(r: Repo, staleDays: number): string {

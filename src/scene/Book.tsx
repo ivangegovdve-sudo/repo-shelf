@@ -72,7 +72,7 @@ export function Book({ repo, x, y, width, height, plankY }: Props) {
   );
 
   useEffect(() => {
-    const { spine, cover, page } = bookTextures(repo, staleDays);
+    const { spine, cover, page } = bookTextures(repo, staleDays, selected || hovered);
     const side = sideColor(repo, staleDays);
     const edge = pageEdgeTexture();
     const mk = (opts: THREE.MeshStandardMaterialParameters) =>
@@ -86,7 +86,7 @@ export function Book({ repo, x, y, width, height, plankY }: Props) {
       });
     // Page block: its +x face is the first page, revealed when the cover swings open.
     const body = [
-      mk({ map: page, roughness: 0.95 }), // +x first page
+      mk(page ? { map: page, roughness: 0.95 } : { color: '#efe8d8', roughness: 0.95 }), // +x first page
       mk({ map: edge, roughness: 0.98 }), // -x fore-edge
       mk({ map: edge, roughness: 0.98 }), // +y top
       mk({ map: edge, roughness: 0.98 }), // -y bottom
@@ -95,7 +95,7 @@ export function Book({ repo, x, y, width, height, plankY }: Props) {
     ];
     const inner = '#efe8d8';
     const coverMats = [
-      mk({ map: cover }), // +x front cover
+      mk(cover ? { map: cover } : { color: side }), // +x front cover
       mk({ color: inner, roughness: 0.95 }), // -x inside of the cover
       mk({ color: side, roughness: 0.8 }),
       mk({ color: side, roughness: 0.8 }),
@@ -105,7 +105,7 @@ export function Book({ repo, x, y, width, height, plankY }: Props) {
     setMats({ body, cover: coverMats, all: [...body, ...coverMats] });
     invalidate();
     return () => [...body, ...coverMats].forEach((m) => m.dispose());
-  }, [repo, staleDays, invalidate]);
+  }, [repo, staleDays, selected, hovered, invalidate]);
 
   const pressRef = useRef<{ x: number; y: number; id: number } | null>(null);
 

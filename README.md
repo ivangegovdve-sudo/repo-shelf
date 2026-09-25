@@ -176,6 +176,14 @@ Environment overrides: `SHELF_CONFIG` (config file path), `SHELF_CACHE` (cache d
 
 `SHELF_CATALOG` overrides the bundled public catalog path. `npm run catalog:refresh -- /path/to/repoindex/catalog.json` refreshes the checked-in public-only snapshot after intersecting it with GitHub's public repository inventory.
 
+The checked-in catalog and public builds intentionally contain only the 1,192 repositories visible through GitHub's public inventory. To browse the complete 1,256-entry repoindex on your own machine, build a separate local-only shelf from the full catalog:
+
+```bash
+npm run build:library:local -- /path/to/repoindex/catalog.json
+```
+
+Open `catalog-full-site/index.html` directly from disk. The command verifies that every catalog entry became exactly one book. That output is gitignored because it may contain non-public repository names; do not publish it or add it to a release.
+
 ## Provenance
 
 The 3D bookshelf application was created by [BkashJEE](https://github.com/BkashJEE/repo-shelf) and remains MIT licensed. This fork's catalog integration and deployment are maintained at [ivangegovdve-sudo/repo-shelf](https://github.com/ivangegovdve-sudo/repo-shelf).

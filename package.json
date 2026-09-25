@@ -45,7 +45,8 @@
     "dist:linux": "npm run build:desktop && electron-builder --linux AppImage",
     "build:static": "vite build --base ./ --outDir dist-static --emptyOutDir",
     "catalog:refresh": "node --import tsx scripts/refresh-public-catalog.ts",
-    "build:pages": "npm run build:static && node --import tsx scripts/build-public-site.ts"
+    "build:pages": "npm run build:static && node --import tsx scripts/build-public-site.ts",
+    "build:library:local": "npm run build:static && node --import tsx scripts/build-local-library.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",

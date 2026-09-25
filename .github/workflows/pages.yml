@@ -2,7 +2,9 @@ name: Publish 3D library
 
 on:
   push:
-    branches: [main, codex/static-purpose-library-20260925]
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -28,6 +30,7 @@ jobs:
       - run: npm test
       - run: npm run build:pages
       - uses: actions/configure-pages@v5
+        if: github.ref == 'refs/heads/main'
         with:
           enablement: true
       - uses: actions/upload-pages-artifact@v3
@@ -35,6 +38,7 @@ jobs:
           path: dist-pages
 
   deploy:
+    if: github.ref == 'refs/heads/main'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
