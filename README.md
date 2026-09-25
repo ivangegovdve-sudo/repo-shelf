@@ -8,6 +8,8 @@ Built with React Three Fiber, Express, and `gh`. Runs on your machine only. Wind
 
 This fork also opens with Ivan's public repoindex catalog already bound as books. Shelves are derived from each capability card's purpose, not language or stars. Originals, authored forks, and zero-ahead reference copies use different bindings; every fork names and links to its upstream source. Stale or unverified cards are labelled rather than presented as current facts.
 
+Catalog entries use the app's real 3D book system: varied volume proportions, clothbound purpose palettes, procedural cover art, hinged covers, and readable first pages. Originals appear as substantial first editions, changed forks as adapted editions, and untouched forks as thinner archival reference editions with the upstream printed directly on the cover and spine.
+
 ![repo shelf](docs/media/screenshot-shelf.png)
 
 | The library door on your desktop | … swings open | … into the shelf |
