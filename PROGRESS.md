@@ -94,4 +94,9 @@ What changed to get here:
   - Publishing with pages no longer makes about six `gh api` calls for each of the 1,192 catalog books.
   - Rewind replays only dated books and leaves undated catalog books on the shelf; it is disabled when nothing is dated.
   - 122/122 unit tests, 15/15 e2e.
+- [x] Codex review, round 4:
+  - Guide books that share a catalog slug are kept.
+  - Catalog repos deleted on GitHub from the app are remembered in `.cache/catalog-deleted.json` and stay off the wall.
+  - `pages.yml` concurrency is per ref, so a PR run cannot cancel the main deploy.
+  - 125/125 unit tests, 15/15 e2e.
 - [ ] Real-GPU frame rate: needs `await __measureWall()` on Ivan's machine

@@ -15,6 +15,8 @@ let handle: AppHandle;
 let server: import('node:http').Server;
 let base: string;
 let visibility: 'PUBLIC' | 'PRIVATE' = 'PUBLIC';
+let voiceExists = true;
+let deps: Parameters<typeof createApp>[0];
 const ghCalls: string[][] = [];
 
 const listItem = (name: string, vis: string) => ({
@@ -29,7 +31,14 @@ const runner: Runner = async (cmd, args) => {
   const [a, b, c] = args;
   if (a === 'auth' && b === 'status') return { code: 0, stdout: '', stderr: '' };
   if (a === 'api' && b === 'user') return { code: 0, stdout: 'me-user\n', stderr: '' };
-  if (a === 'repo' && b === 'list') return { code: 0, stdout: JSON.stringify([listItem('voice-tool', visibility), listItem('solo-tool', 'PUBLIC')]), stderr: '' };
+  if (a === 'repo' && b === 'list') {
+    const items = [...(voiceExists ? [listItem('voice-tool', visibility)] : []), listItem('solo-tool', 'PUBLIC')];
+    return { code: 0, stdout: JSON.stringify(items), stderr: '' };
+  }
+  if (a === 'repo' && b === 'delete' && c === 'me-user/voice-tool') {
+    voiceExists = false;
+    return { code: 0, stdout: '', stderr: '' };
+  }
   if (a === 'repo' && b === 'edit' && c === 'me-user/voice-tool') {
     visibility = args.includes('private') ? 'PRIVATE' : 'PUBLIC';
     return { code: 0, stdout: '', stderr: '' };
@@ -51,7 +60,8 @@ beforeAll(async () => {
     }],
   }));
   const cacheDir = path.join(tmp, '.cache');
-  handle = await createApp({ configFile, cacheDir, catalogFile, runner, enricher: new GitHubEnricher(path.join(cacheDir, 'github.json'), runner), spawn: (() => ({})) as never });
+  deps = { configFile, cacheDir, catalogFile, runner, enricher: new GitHubEnricher(path.join(cacheDir, 'github.json'), runner), spawn: (() => ({})) as never };
+  handle = await createApp(deps);
   await new Promise<void>((resolve) => {
     server = handle.app.listen(0, '127.0.0.1', () => resolve());
   });
@@ -94,5 +104,24 @@ describe('a cataloged repo that is also on your GitHub shelf', () => {
     expect(after).toHaveLength(1);
     expect(after[0].id).toBe(book.id);
     expect(after[0].visibility).toBe('private');
+  });
+
+  it('stays gone after it is deleted on GitHub from here, even after a restart', async () => {
+    const [book] = voiceBooks(await state());
+    const r = await fetch(`${base}/api/repo/delete`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ repoId: book.id, confirmName: 'voice-tool' }),
+    });
+    expect(r.status).toBe(200);
+    expect(voiceBooks(await state())).toHaveLength(0);
+    const restarted = await createApp({ ...deps, enricher: new GitHubEnricher(path.join(deps.cacheDir, 'github.json'), runner) });
+    try {
+      const s = restarted.state();
+      expect(voiceBooks(s)).toHaveLength(0);
+      expect(s.shelves.some((x) => x.kind === 'catalog')).toBe(false);
+    } finally {
+      restarted.close();
+    }
   });
 });

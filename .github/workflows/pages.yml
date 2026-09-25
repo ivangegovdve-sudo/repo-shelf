@@ -12,9 +12,11 @@ permissions:
   pages: write
   id-token: write
 
+# One group per ref: a PR run can never cancel the main build or deploy, and main never cancels
+# an in-flight production deployment. Superseded PR runs are still cancelled.
 concurrency:
-  group: pages
-  cancel-in-progress: true
+  group: pages-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build:

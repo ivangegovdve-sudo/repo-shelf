@@ -113,4 +113,19 @@ describe('mergeCatalog', () => {
     expect(voice.catalog).toMatchObject({ kind: 'original', githubShelfId: 'gh' });
     expect(reader).toEqual(cat.repos[1]);
   });
+
+  it('keeps a guide book that shares a catalog slug: its documentation pages have nowhere else to live', () => {
+    const cat = catalogToState(catalog([item()]));
+    const guide = local({ id: 'guide', virtual: true, path: '', shelfId: 'links', doc: 'https://github.com/ivangegovdve-sudo/voice-tool/tree/main/docs' });
+    expect(mergeCatalog(cat, [], [guide]).repos.map((r) => r.id)).toEqual([cat.repos[0].id, 'guide']);
+  });
+
+  it('leaves out catalog repos deleted on GitHub, and bays they emptied', () => {
+    const cat = catalogToState(catalog([item(), item({ name: 'reader', full_name: 'ivangegovdve-sudo/reader', topics: ['ebook'], summary: 'Reads ebooks aloud.' })]));
+    const merged = mergeCatalog(cat, [], [], new Set(['ivangegovdve-sudo/voice-tool']));
+    expect(merged.repos.map((r) => r.repoSlug)).toEqual(['ivangegovdve-sudo/reader']);
+    const total = merged.shelves.reduce((n, s) => n + s.repoCount, 0);
+    expect(total).toBe(1);
+    expect(merged.shelves.every((s) => s.repoCount > 0)).toBe(true);
+  });
 });

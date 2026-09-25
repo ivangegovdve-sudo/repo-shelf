@@ -124,23 +124,28 @@ export function catalogToState(value: unknown): AppState {
 
 /**
  * Catalog books first, then the local shelves. An on-disk clone is always kept, even of a
- * cataloged repo: it is what can be opened, moved and renamed. A virtual book that duplicates a
- * catalog entry is dropped, since the catalog book stands for it. When that duplicate comes from a
- * GitHub shelf, its live state (visibility, archived, metadata) is folded into the catalog book,
- * which then offers the same owner-checked GitHub actions.
+ * cataloged repo: it is what can be opened, moved and renamed. So is a guide book: its
+ * documentation pages are something the catalog book does not have. Any other virtual book that
+ * duplicates a catalog entry is dropped, since the catalog book stands for it. When that duplicate
+ * comes from a GitHub shelf, its live state (visibility, archived, metadata) is folded into the
+ * catalog book, which then offers the same owner-checked GitHub actions.
+ *
+ * `deleted` lists slugs deleted on GitHub from this app: the catalog is a snapshot and would
+ * otherwise put them back on the wall.
  */
-export function mergeCatalog(catalog: AppState | null, shelves: Shelf[], repos: Repo[]): { shelves: Shelf[]; repos: Repo[] } {
+export function mergeCatalog(catalog: AppState | null, shelves: Shelf[], repos: Repo[], deleted: ReadonlySet<string> = new Set()): { shelves: Shelf[]; repos: Repo[] } {
   if (!catalog) return { shelves, repos };
-  const slugs = new Set(catalog.repos.map((repo) => repo.repoSlug?.toLowerCase()).filter(Boolean));
+  const current = catalog.repos.filter((repo) => !repo.repoSlug || !deleted.has(repo.repoSlug.toLowerCase()));
+  const slugs = new Set(current.map((repo) => repo.repoSlug?.toLowerCase()).filter(Boolean));
   const githubShelves = new Set(shelves.filter((s) => s.kind === 'github').map((s) => s.id));
   const live = new Map<string, Repo>();
   const kept: Repo[] = [];
   for (const repo of repos) {
     const slug = repo.repoSlug?.toLowerCase();
-    if (!repo.virtual || !slug || !slugs.has(slug)) kept.push(repo);
+    if (!repo.virtual || repo.doc || !slug || !slugs.has(slug)) kept.push(repo);
     else if (githubShelves.has(repo.shelfId) && !live.has(slug)) live.set(slug, repo);
   }
-  const books = catalog.repos.map((book) => {
+  const books = current.map((book) => {
     const twin = book.repoSlug ? live.get(book.repoSlug.toLowerCase()) : undefined;
     if (!twin || !book.catalog) return book;
     return {
@@ -152,7 +157,10 @@ export function mergeCatalog(catalog: AppState | null, shelves: Shelf[], repos: 
       catalog: { ...book.catalog, githubShelfId: twin.shelfId },
     };
   });
-  return { shelves: [...catalog.shelves, ...shelves], repos: [...books, ...kept] };
+  const counts = new Map<string, number>();
+  for (const book of books) counts.set(book.shelfId, (counts.get(book.shelfId) ?? 0) + 1);
+  const catalogShelves = catalog.shelves.map((s) => ({ ...s, repoCount: counts.get(s.id) ?? 0 })).filter((s) => s.repoCount > 0);
+  return { shelves: [...catalogShelves, ...shelves], repos: [...books, ...kept] };
 }
 
 export function loadCatalogFile(file: string): AppState | null {

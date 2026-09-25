@@ -61,6 +61,15 @@ function loopbackOnly(req: Request, res: Response, next: NextFunction): void {
   next();
 }
 
+function readDeleted(file: string): string[] {
+  try {
+    const list: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string').map((x) => x.toLowerCase()) : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function createApp(deps: AppDeps): Promise<AppHandle> {
   const runner = deps.runner ?? execRunner;
   const spawn = deps.spawn ?? nodeSpawn;
@@ -75,10 +84,13 @@ export async function createApp(deps: AppDeps): Promise<AppHandle> {
   let local: { shelves: Shelf[]; repos: Repo[] } = { shelves: [], repos: [] };
   const hub = new EventHub();
   const pagesCache = new PagesCache();
+  // Catalog repos deleted on GitHub from here. The catalog is a snapshot, so without this they would come back.
+  const deletedFile = path.join(deps.cacheDir, 'catalog-deleted.json');
+  const deleted = new Set<string>(readDeleted(deletedFile));
 
   /** Rebuild the served state from the local shelves and the catalog, in config order. */
   function publishState(): void {
-    const merged = mergeCatalog(deps.catalogFile ? loadCatalogFile(deps.catalogFile) : null, local.shelves, local.repos);
+    const merged = mergeCatalog(deps.catalogFile ? loadCatalogFile(deps.catalogFile) : null, local.shelves, local.repos, deleted);
     const order = new Map([...merged.shelves.filter((s) => s.kind === 'catalog').map((s, i) => [s.id, i] as const), ...config.shelves.map((s, i) => [entryId(s), i + 100] as const)]);
     shelves = [...merged.shelves].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
     repos = merged.repos;
@@ -359,6 +371,11 @@ export async function createApp(deps: AppDeps): Promise<AppHandle> {
       const repo = requireRepo(req);
       const confirmName = typeof req.body?.confirmName === 'string' ? req.body.confirmName : '';
       await audited('delete-github', repo, { confirmName }, () => deleteGitHubRepo(repo, confirmName, runner, enricher.login()));
+      if (repo.catalog && repo.repoSlug) {
+        deleted.add(repo.repoSlug.toLowerCase());
+        fs.mkdirSync(deps.cacheDir, { recursive: true });
+        fs.writeFileSync(deletedFile, `${JSON.stringify([...deleted].sort(), null, 2)}\n`, 'utf8');
+      }
       await refreshGithubShelves();
       hub.broadcast('state:changed', { reason: 'delete' });
       res.json({ ok: true, state: state() });
