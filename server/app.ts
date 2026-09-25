@@ -24,6 +24,7 @@ import { appendAudit } from './audit.js';
 import { PagesCache, buildPages } from './pages.js';
 import { buildStaticSite, publishSite } from './publish.js';
 import { EventHub } from './events.js';
+import { loadCatalogFile } from './catalog.js';
 
 export interface AppDeps {
   configFile: string;
@@ -37,6 +38,8 @@ export interface AppDeps {
   spawn?: Spawner;
   staticDir?: string;
   home?: string;
+  /** Public repoindex snapshot. Catalog books are read-only virtual books. */
+  catalogFile?: string;
 }
 
 export interface AppHandle {
@@ -70,6 +73,17 @@ export async function createApp(deps: AppDeps): Promise<AppHandle> {
   let repos: Repo[] = [];
   const hub = new EventHub();
   const pagesCache = new PagesCache();
+
+  function withCatalog(localShelves: Shelf[], localRepos: Repo[]): { shelves: Shelf[]; repos: Repo[] } {
+    if (!deps.catalogFile) return { shelves: localShelves, repos: localRepos };
+    const catalog = loadCatalogFile(deps.catalogFile);
+    if (!catalog) return { shelves: localShelves, repos: localRepos };
+    const catalogIds = new Set(catalog.repos.map((repo) => repo.repoSlug).filter(Boolean));
+    return {
+      shelves: [...catalog.shelves, ...localShelves],
+      repos: [...catalog.repos, ...localRepos.filter((repo) => !repo.repoSlug || !catalogIds.has(repo.repoSlug))],
+    };
+  }
 
   const state = (): AppState => ({
     shelves,
@@ -119,12 +133,14 @@ export async function createApp(deps: AppDeps): Promise<AppHandle> {
       }
       const result = await scanAll(config, runner, enricher.listRepos);
       const keepGithub = new Map(repos.filter((r) => r.github).map((r) => [r.repoSlug, r.github]));
-      shelves = result.shelves;
-      repos = result.repos.map((r) => ({ ...r, github: (r.repoSlug && keepGithub.get(r.repoSlug)) || null }));
-      enrichInBackground(repos.filter((r) => r.repoSlug && !r.github));
+      const localRepos = result.repos.map((r) => ({ ...r, github: (r.repoSlug && keepGithub.get(r.repoSlug)) || null }));
+      const combined = withCatalog(result.shelves, localRepos);
+      shelves = combined.shelves;
+      repos = combined.repos;
+      enrichInBackground(localRepos.filter((r) => r.repoSlug && !r.github));
     }
     // Keep shelf order identical to config order.
-    const order = new Map(config.shelves.map((s, i) => [entryId(s), i]));
+    const order = new Map([...shelves.filter((s) => s.kind === 'catalog').map((s, i) => [s.id, i] as const), ...config.shelves.map((s, i) => [entryId(s), i + 100] as const)]);
     shelves.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   }
 

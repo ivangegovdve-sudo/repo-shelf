@@ -439,6 +439,23 @@ code {
   border-radius: 999px;
   letter-spacing: 0.02em;
 }
+.tag-original { background: #168b72; color: #fff; }
+.tag-authored { background: #a36825; color: #fff; }
+.tag-reference { background: #5e6872; color: #fff; }
+
+.attribution {
+  display: grid;
+  gap: 4px;
+  margin: 14px 0;
+  padding: 12px 14px;
+  border-left: 4px solid #168b72;
+  background: color-mix(in srgb, var(--panel, #fff) 88%, #168b72);
+  border-radius: 4px;
+}
+.attribution.authored-fork { border-left-color: #d18a32; }
+.attribution.reference-copy { border-left-color: #727d87; }
+.attribution span { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+.attribution small { line-height: 1.45; opacity: .78; }
 .tag-muted {
   background: color-mix(in srgb, var(--ink) 10%, transparent);
   color: var(--ink);

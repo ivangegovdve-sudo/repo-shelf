@@ -4,16 +4,17 @@ import type { Repo, Shelf as ShelfT } from '../types';
 import { useShelf } from '../store';
 import { Book } from './Book';
 import { layoutRow, plankTopY, PLANK_T, ROW_H, SHELF_W, SIDE_PAD, USABLE_W, BOOK_DEPTH } from './layout';
-import { backPanelTexture, woodTexture } from './textures';
+import { backPanelTexture, baseColor, woodTexture } from './textures';
 import { themeById } from '../themes';
 
 interface Props {
   shelf: ShelfT;
   row: number;
   repos: Repo[];
+  detailed?: boolean;
 }
 
-export function ShelfRow({ shelf, row, repos }: Props) {
+export function ShelfRow({ shelf, row, repos, detailed = true }: Props) {
   const plankY = plankTopY(row);
   const { slots, totalWidth } = useMemo(() => layoutRow(repos), [repos]);
   const dragOver = useShelf((s) => s.drag?.overShelfId === shelf.id);
@@ -24,6 +25,7 @@ export function ShelfRow({ shelf, row, repos }: Props) {
   const startX = -SHELF_W / 2 + SIDE_PAD - Math.min(offset, overflow);
   const theme = useShelf((s) => themeById(s.themeId));
   const caseStyle = useShelf((s) => s.caseStyle);
+  const staleDays = useShelf((s) => s.staleAfterDays);
   const plankT = caseStyle === 'modern' ? PLANK_T * 0.55 : PLANK_T;
   const wood = woodTexture();
   const back = backPanelTexture(theme);
@@ -33,6 +35,13 @@ export function ShelfRow({ shelf, row, repos }: Props) {
   const canLeft = offset > 0;
   const canRight = offset < overflow - 0.01;
   const step = USABLE_W * 0.6;
+  // A catalog shelf may contain hundreds of books. Keep layout exact, but only
+  // mount books near the current viewport so canvas textures and WebGL meshes
+  // stay bounded as the row scrolls.
+  const visibleSlots = slots.filter((slot) => {
+    const sx = startX + slot.x;
+    return sx + slot.width / 2 >= -SHELF_W / 2 - 1 && sx - slot.width / 2 <= SHELF_W / 2 + 1;
+  });
 
   return (
     <group>
@@ -66,16 +75,21 @@ export function ShelfRow({ shelf, row, repos }: Props) {
         </mesh>
       )}
 
-      {slots.map((slot) => (
-        <Book
+      {visibleSlots.map((slot) => detailed ? (
+        <Book key={slot.repo.id} repo={slot.repo} x={startX + slot.x} y={plankY + slot.height / 2} width={slot.width} height={slot.height} plankY={plankY} />
+      ) : (
+        <mesh
           key={slot.repo.id}
-          repo={slot.repo}
-          x={startX + slot.x}
-          y={plankY + slot.height / 2}
-          width={slot.width}
-          height={slot.height}
-          plankY={plankY}
-        />
+          position={[startX + slot.x, plankY + slot.height / 2, -0.08]}
+          onClick={(event) => {
+            event.stopPropagation();
+            useShelf.getState().setScrollRow(row);
+            useShelf.getState().select(slot.repo.id);
+          }}
+        >
+          <boxGeometry args={[slot.width, slot.height, BOOK_DEPTH]} />
+          <meshStandardMaterial color={baseColor(slot.repo, staleDays)} roughness={0.88} />
+        </mesh>
       ))}
 
       <Html position={[0, plankY - plankT / 2, BOOK_DEPTH / 2 + 0.22]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>

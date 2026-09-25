@@ -1,0 +1,35 @@
+name: Windows desktop preview
+
+on:
+  push:
+    branches: [codex/static-purpose-library-20260925]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run dist:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: repo-shelf-windows
+          path: release/*.exe
+          if-no-files-found: error
+      - name: Publish preview installer release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view catalog-preview >/dev/null 2>&1 || gh release create catalog-preview --target "$GITHUB_SHA" --prerelease --title "Catalog bookshelf preview" --notes "Windows installer and portable build from PR #1. This is a preview; main is not merged."
+          gh release upload catalog-preview release/*.exe --clobber

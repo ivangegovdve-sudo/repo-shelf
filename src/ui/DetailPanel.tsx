@@ -62,7 +62,7 @@ export function DetailPanel() {
   const lang = languageOf(repo);
   const stale = isStale(repo, staleDays);
 
-  const ownsIt = Boolean(repo.owner && githubLogin && repo.owner.toLowerCase() === githubLogin.toLowerCase());
+  const ownsIt = Boolean(!repo.catalog && repo.owner && githubLogin && repo.owner.toLowerCase() === githubLogin.toLowerCase());
   const archive = (archived: boolean) => {
     void useShelf
       .getState()
@@ -100,6 +100,12 @@ export function DetailPanel() {
             {repo.visibility === 'public' && <span className="tag tag-muted">Public</span>}
             {repo.archived && <span className="tag tag-muted">Archived</span>}
             {repo.github?.isFork && <span className="tag tag-muted">Fork</span>}
+            {repo.catalog?.kind === 'original' && <span className="tag tag-original">Ivan's original</span>}
+            {repo.catalog?.kind === 'authored-fork' && <span className="tag tag-authored">Fork · {repo.catalog.commitsAhead} ahead</span>}
+            {repo.catalog?.kind === 'reference-copy' && <span className="tag tag-reference">Reference copy · 0 ahead</span>}
+            {repo.catalog?.cardStale && <span className="tag tag-red">Stale card</span>}
+            {repo.catalog?.verificationStatus === 'unverified' && <span className="tag tag-red">Unverified card</span>}
+            {repo.catalog && <span className={`tag ${repo.catalog.alive ? 'tag-original' : 'tag-muted'}`}>{repo.catalog.alive ? 'Alive' : 'Dormant'}</span>}
             {repo.dirtyCount > 0 && <span className="tag tag-red">{repo.dirtyCount} uncommitted</span>}
             {!repo.virtual && stale && <span className="tag tag-muted">Stale</span>}
             {repo.error && <span className="tag tag-red">git error</span>}
@@ -115,6 +121,18 @@ export function DetailPanel() {
                   ? 'No description on GitHub.'
                   : 'Local repo, no GitHub remote.')}
           </p>
+
+          {repo.catalog?.upstream && (
+            <div className={`attribution ${repo.catalog.kind}`}>
+              <strong>{repo.catalog.kind === 'reference-copy' ? 'Upstream work · reference copy' : 'Forked from upstream'}</strong>
+              <span>{repo.catalog.upstream}</span>
+              <small>
+                {repo.catalog.kind === 'reference-copy'
+                  ? 'This fork has zero commits ahead. It is shown as a reference, not as Ivan’s work.'
+                  : `Ivan’s fork is ${repo.catalog.commitsAhead} commits ahead; the original source remains attributed here.`}
+              </small>
+            </div>
+          )}
 
           <button className="path" onClick={copyPath} title="Click to copy">
             {repo.virtual ? repo.linkUrl : repo.path}
@@ -143,8 +161,11 @@ export function DetailPanel() {
               </div>
               <div>
                 <dt>Owner</dt>
-                <dd>{repo.owner ?? '—'}</dd>
+                <dd>{repo.catalog?.upstream?.split('/')[0] ?? repo.owner ?? '—'}</dd>
               </div>
+              {repo.catalog?.upstream && <div className="span2"><dt>Upstream</dt><dd>{repo.catalog.upstream}</dd></div>}
+              {repo.catalog && <div><dt>Card</dt><dd>{repo.catalog.cardStale ? 'Stale' : 'Current'} · {repo.catalog.verificationStatus}</dd></div>}
+              {repo.catalog && <div><dt>Activity</dt><dd>{repo.catalog.alive ? 'Alive' : 'Dormant'} · {relativeTime(repo.lastCommitAt)}</dd></div>}
               <div className="span2">
                 <dt>Topics</dt>
                 <dd>{repo.github?.topics.length ? repo.github.topics.join(', ') : '—'}</dd>
@@ -179,7 +200,19 @@ export function DetailPanel() {
             </dl>
           )}
 
-          {readOnly ? (
+          {repo.catalog ? (
+            <div className="btn-row">
+              <a className="btn primary" href={repo.linkUrl ?? repo.catalog.repoUrl} target="_blank" rel="noopener">
+                {repo.catalog.upstream ? 'View upstream source ↗' : 'View original on GitHub ↗'}
+              </a>
+              {repo.catalog.upstream && (
+                <a className="btn" href={repo.catalog.repoUrl} target="_blank" rel="noopener">View Ivan's fork ↗</a>
+              )}
+              {!readOnly && repo.remoteUrl && (
+                <button className="btn" onClick={() => openDialog({ kind: 'clone', repoId: repo.id })} disabled={!diskShelves.length}>Clone Ivan's copy…</button>
+              )}
+            </div>
+          ) : readOnly ? (
             <div className="btn-row">
               {(repo.linkUrl || repo.repoSlug) && (
                 <a className="btn primary" href={repo.linkUrl ?? `https://github.com/${repo.repoSlug}`} target="_blank" rel="noopener">
@@ -235,7 +268,7 @@ export function DetailPanel() {
             </>
           )}
 
-          {!readOnly && repo.virtual && repo.repoSlug && (
+          {!readOnly && !repo.catalog && repo.virtual && repo.repoSlug && (
             <div className="gh-manage">
               <div className="lbl">Manage on GitHub</div>
               {ownsIt ? (

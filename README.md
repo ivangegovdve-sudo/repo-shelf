@@ -1,10 +1,14 @@
 # repo shelf.
 
-[![CI](https://github.com/BkashJEE/repo-shelf/actions/workflows/ci.yml/badge.svg)](https://github.com/BkashJEE/repo-shelf/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![CI](https://github.com/ivangegovdve-sudo/repo-shelf/actions/workflows/ci.yml/badge.svg)](https://github.com/ivangegovdve-sudo/repo-shelf/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 Your git repos as books on a 3D bookshelf. Every root folder you configure is a shelf, every git repo inside it is a book. Hover to browse, click to open, zoom and orbit the case, drag a book to another shelf to move the repo on disk.
 
 Built with React Three Fiber, Express, and `gh`. Runs on your machine only. Windows, macOS and Linux.
+
+This fork also opens with Ivan's public repoindex catalog already bound as books. Shelves are derived from each capability card's purpose, not language or stars. Originals, authored forks, and zero-ahead reference copies use different bindings; every fork names and links to its upstream source. Stale or unverified cards are labelled rather than presented as current facts.
+
+Catalog entries use the app's real 3D book system: varied volume proportions, clothbound purpose palettes, procedural cover art, hinged covers, and readable first pages. Originals appear as substantial first editions, changed forks as adapted editions, and untouched forks as thinner archival reference editions with the upstream printed directly on the cover and spine.
 
 ![repo shelf](docs/media/screenshot-shelf.png)
 
@@ -40,6 +44,8 @@ npm run dist:mac       # macOS .dmg (run on a Mac)
 npm run dist:linux     # AppImage
 ```
 
+The Windows workflow publishes both an NSIS installer and a portable `.exe` to the `catalog-preview` prerelease. The installer is only called working after that Windows runner completes successfully; a local Linux build is not evidence that a Windows installer launches.
+
 If Windows Defender blocks the build with `EPERM ... win-unpacked.tmp`, build to another drive: `npx electron-builder --win --config.directories.output=D:/repo-shelf-release`.
 
 - Tray icon with **Open the shelf / Show the door / Quit**. `Ctrl+Shift+L` (`⌘⇧L` on macOS) toggles the shelf from anywhere.
@@ -59,6 +65,9 @@ If Windows Defender blocks the build with `EPERM ... win-unpacked.tmp`, build to
 | Yellow dot at the bottom | git could not read the repo |
 | Dotted outline, "PUBLIC ↗" or "🔒 PRIVATE" | A GitHub or link book: not on disk yet; the lock marks a private repo |
 | "ARCHIVED" stamp | Archived on GitHub |
+| Gray binding, “UPSTREAM WORK · REFERENCE” | Fork with zero commits ahead; reference copy, not Ivan's work |
+| Amber binding, “FORK · n AHEAD” | Fork containing commits of Ivan's own; upstream remains named |
+| Green edge, “IVAN'S ORIGINAL” | Repository authored as an original project |
 
 ## Actions
 
@@ -164,6 +173,20 @@ The theme button in the header switches colors (Slate, Library, Midnight, Nordic
 Shelf order in the file is shelf order on screen. Each folder shelf is scanned one level deep: every immediate sub-folder that contains `.git` becomes a book. Hidden folders are skipped. You can add and remove shelves from the **Shelves** button in the header. On macOS and Linux the default home shelves are `~/Developer`, `~/Documents`, and `~`.
 
 Environment overrides: `SHELF_CONFIG` (config file path), `SHELF_CACHE` (cache directory), `SHELF_PORT` (API port).
+
+`SHELF_CATALOG` overrides the bundled public catalog path. `npm run catalog:refresh -- /path/to/repoindex/catalog.json` refreshes the checked-in public-only snapshot after intersecting it with GitHub's public repository inventory.
+
+The checked-in catalog and public builds intentionally contain only the 1,192 repositories visible through GitHub's public inventory. To browse the complete 1,256-entry repoindex on your own machine, build a separate local-only shelf from the full catalog:
+
+```bash
+npm run build:library:local -- /path/to/repoindex/catalog.json
+```
+
+Open `catalog-full-site/index.html` directly from disk. The command verifies that every catalog entry became exactly one book. That output is gitignored because it may contain non-public repository names; do not publish it or add it to a release.
+
+## Provenance
+
+The 3D bookshelf application was created by [BkashJEE](https://github.com/BkashJEE/repo-shelf) and remains MIT licensed. This fork's catalog integration and deployment are maintained at [ivangegovdve-sudo/repo-shelf](https://github.com/ivangegovdve-sudo/repo-shelf).
 
 ## Keyboard
 

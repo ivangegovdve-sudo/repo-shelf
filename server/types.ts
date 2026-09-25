@@ -29,7 +29,7 @@ export interface ShelfConfig {
   githubCacheHours: number;
 }
 
-export type ShelfKind = 'disk' | 'links' | 'github';
+export type ShelfKind = 'disk' | 'links' | 'github' | 'catalog';
 
 export interface Shelf {
   id: string;
@@ -50,6 +50,22 @@ export interface GitHubMeta {
   pushedAt: string;
   htmlUrl: string;
   fetchedAt: string;
+}
+
+export interface CatalogMeta {
+  /** Attribution class: reference copies contain no commits by Ivan. */
+  kind: 'original' | 'authored-fork' | 'reference-copy';
+  /** GitHub owner/name of the project this fork came from. */
+  upstream: string | null;
+  commitsAhead: number;
+  /** Ivan's repository URL; fork books primarily link to upstream instead. */
+  repoUrl: string;
+  cardStale: boolean;
+  verificationStatus: 'verified' | 'unverified';
+  confidence: 'high' | 'medium' | 'low' | 'unrecorded';
+  cardGeneratedAt: string;
+  /** Active when last push was within one year of catalog generation. */
+  alive: boolean;
 }
 
 export interface Repo {
@@ -78,6 +94,7 @@ export interface Repo {
   owner: string | null;
   repoSlug: string | null;
   github: GitHubMeta | null;
+  catalog?: CatalogMeta;
   error?: string;
 }
 

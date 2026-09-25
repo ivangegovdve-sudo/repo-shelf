@@ -32,9 +32,14 @@ export function Header() {
       </div>
       <nav className="hdr-nav">
         {isStaticSite() && (
-          <a className="status muted" href={staticData()!.sourceUrl} target="_blank" rel="noopener" title="Get your own repo shelf">
-            published {new Date(staticData()!.generatedAt).toLocaleDateString()} · get yours ↗
-          </a>
+          <>
+            <a className="btn small primary" href="https://github.com/ivangegovdve-sudo/repo-shelf/releases/tag/catalog-preview" target="_blank" rel="noopener">
+              Install for Windows ↗
+            </a>
+            <a className="status muted" href={staticData()!.sourceUrl} target="_blank" rel="noopener" title="View the source">
+              published {new Date(staticData()!.generatedAt).toLocaleDateString()} · source ↗
+            </a>
+          </>
         )}
         {!isStaticSite() && (
           <>

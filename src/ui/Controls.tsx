@@ -34,10 +34,17 @@ export function Controls() {
     return () => window.removeEventListener('keydown', onKey);
   }, [setQuery]);
 
+  const catalog = repos.some((repo) => repo.catalog);
   const langs = languageCounts(repos);
   const chips: { key: Filter; label: string; count?: number }[] = [
     { key: 'all', label: 'All repos', count: repos.length },
-    ...langs.slice(0, 8).map((l) => ({ key: `lang:${l.language}` as Filter, label: l.language, count: l.count })),
+    ...(catalog ? [
+      { key: 'originals' as Filter, label: 'Originals', count: repos.filter((repo) => repo.catalog?.kind === 'original').length },
+      { key: 'authored-fork' as Filter, label: 'Authored forks', count: repos.filter((repo) => repo.catalog?.kind === 'authored-fork').length },
+      { key: 'reference-copy' as Filter, label: 'Reference copies', count: repos.filter((repo) => repo.catalog?.kind === 'reference-copy').length },
+      { key: 'card-stale' as Filter, label: 'Stale cards', count: repos.filter((repo) => repo.catalog?.cardStale).length },
+      { key: 'unverified' as Filter, label: 'Unverified', count: repos.filter((repo) => repo.catalog?.verificationStatus === 'unverified').length },
+    ] : langs.slice(0, 8).map((l) => ({ key: `lang:${l.language}` as Filter, label: l.language, count: l.count }))),
     { key: 'remote', label: 'Has remote' },
     { key: 'dirty', label: 'Dirty' },
     { key: 'stale', label: 'Stale' },
@@ -73,7 +80,7 @@ export function Controls() {
         <input
           ref={inputRef}
           type="search"
-          placeholder="Find a repo, language, topic or path"
+          placeholder="Find a repo, purpose, description or upstream"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search repos"

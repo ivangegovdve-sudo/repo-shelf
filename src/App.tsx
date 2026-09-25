@@ -73,7 +73,7 @@ export function App() {
           {repos.map((r) => (
             <li key={r.id}>
               <button data-book={r.name} data-shelf={r.shelfId} onClick={() => useShelf.getState().select(r.id)}>
-                {r.name}
+                {r.name}{r.catalog ? ` — ${r.catalog.kind}${r.catalog.upstream ? `, upstream ${r.catalog.upstream}` : ''}` : ''}
               </button>
             </li>
           ))}
