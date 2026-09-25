@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { AppState, Repo, RepoPages, Shelf } from './types';
 import { api, ApiError, subscribeEvents } from './api';
-import { matches, type Filter } from './derive';
+import { compareOnShelf, matches, type Filter } from './derive';
 import { applyThemeCss, loadThemeId, saveThemeId, themeById } from './themes';
 import { staticData, staticState } from './static';
 
@@ -304,7 +304,7 @@ export function selectVisibleRepos(st: ShelfState): Repo[] {
   const order = new Map(st.shelves.map((s, i) => [s.id, i]));
   return st.repos
     .filter((r) => matches(r, st.query, st.filter, st.activeShelfId, st.staleAfterDays))
-    .sort((a, b) => (order.get(a.shelfId) ?? 0) - (order.get(b.shelfId) ?? 0) || a.name.localeCompare(b.name));
+    .sort((a, b) => (order.get(a.shelfId) ?? 0) - (order.get(b.shelfId) ?? 0) || compareOnShelf(a, b));
 }
 
 export function isFiltering(st: ShelfState): boolean {

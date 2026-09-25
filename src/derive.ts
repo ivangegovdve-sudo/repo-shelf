@@ -75,6 +75,24 @@ export function isStale(r: Repo, staleAfterDays: number, now: Date = new Date())
   return ms > staleAfterDays * 24 * 3600 * 1000;
 }
 
+/** Who wrote a catalog book, read from its spine: Ivan's original, a fork he changed, or an untouched reference copy. */
+export type Edition = 'original' | 'adapted' | 'reference' | 'plain';
+
+export function editionOf(r: Repo): Edition {
+  const kind = r.catalog?.kind;
+  if (kind === 'original') return 'original';
+  if (kind === 'authored-fork') return 'adapted';
+  if (kind === 'reference-copy') return 'reference';
+  return 'plain';
+}
+
+const EDITION_RANK: Record<Edition, number> = { original: 0, adapted: 1, plain: 2, reference: 3 };
+
+/** Shelf order inside one category: Ivan's own work first, reference copies last, then by name. */
+export function compareOnShelf(a: Repo, b: Repo): number {
+  return EDITION_RANK[editionOf(a)] - EDITION_RANK[editionOf(b)] || a.name.localeCompare(b.name);
+}
+
 export function hasGoldBand(r: Repo): boolean {
   return (r.github?.stars ?? 0) > 0;
 }
