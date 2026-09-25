@@ -27,14 +27,38 @@ export interface BookSlot {
   height: number;
 }
 
+function stableFraction(value: string, shift = 0): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) hash = Math.imul(hash ^ value.charCodeAt(index), 16777619);
+  hash ^= hash >>> 16;
+  hash = Math.imul(hash, 0x7feb352d);
+  hash ^= hash >>> 15;
+  hash = Math.imul(hash, 0x846ca68b);
+  hash ^= hash >>> 16;
+  return ((hash >>> shift) & 0xffff) / 0xffff;
+}
+
+/** Catalog books have no useful disk-size or commit-count dimensions. Give
+ * them stable edition-like proportions, with authored work more substantial
+ * than thin archival reference volumes. */
+export function catalogBookDimensions(repo: Repo): { width: number; height: number } {
+  const kind = repo.catalog?.kind ?? 'reference-copy';
+  const a = stableFraction(repo.id || repo.name);
+  const b = stableFraction(repo.id || repo.name, 8);
+  if (kind === 'original') return { width: 0.5 + a * 0.24, height: 2.62 + b * 0.64 };
+  if (kind === 'authored-fork') return { width: 0.4 + a * 0.18, height: 2.4 + b * 0.56 };
+  return { width: 0.27 + a * 0.14, height: 2.08 + b * 0.48 };
+}
+
 export function layoutRow(repos: Repo[]): { slots: BookSlot[]; totalWidth: number } {
   let cursor = 0;
   const slots: BookSlot[] = [];
   for (const repo of repos) {
     // Link books have no disk footprint: size them by popularity instead.
     const stars = repo.github?.stars ?? 0;
-    const width = repo.virtual ? bookThickness(stars * 40 + 400) : bookThickness(repo.sizeKB);
-    const height = repo.virtual ? bookHeight(stars * 4 + 60) : bookHeight(repo.commitCount);
+    const catalogDimensions = repo.catalog ? catalogBookDimensions(repo) : null;
+    const width = catalogDimensions?.width ?? (repo.virtual ? bookThickness(stars * 40 + 400) : bookThickness(repo.sizeKB));
+    const height = catalogDimensions?.height ?? (repo.virtual ? bookHeight(stars * 4 + 60) : bookHeight(repo.commitCount));
     slots.push({ repo, x: cursor + width / 2, width, height });
     cursor += width + GAP;
   }

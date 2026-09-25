@@ -4,6 +4,7 @@ import { bookColor, displayName, hasGoldBand, hasRedTab, isStale, languageOf } f
 import type { Theme } from '../themes';
 
 const cache = new Map<string, { key: string; spine: THREE.CanvasTexture; cover: THREE.CanvasTexture; page: THREE.CanvasTexture }>();
+const MAX_BOOK_TEXTURES = 240;
 
 function visualKey(r: Repo, staleDays: number): string {
   return [r.name, languageOf(r), r.dirtyCount > 0, r.github?.stars ?? 0, r.virtual ? 'link' : isStale(r, staleDays), r.github?.description ?? '', r.visibility, r.archived, r.catalog?.kind, r.catalog?.upstream, r.catalog?.cardStale, r.catalog?.verificationStatus, r.catalog?.alive, r.lastCommitAt].join('|');
@@ -35,8 +36,7 @@ function leatherFor(name: string): string {
 
 export function baseColor(r: Repo, staleDays: number): string {
   if (r.doc) return leatherFor(r.name);
-  if (r.catalog?.kind === 'reference-copy') return '#687078';
-  if (r.catalog?.kind === 'authored-fork') return '#8a5a2e';
+  if (r.catalog) return catalogColors(r).cloth;
   const c = bookColor(languageOf(r));
   if (r.virtual) return c;
   return isStale(r, staleDays) ? desaturate(c) : c;
@@ -69,8 +69,241 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): st
 
 const SERIF = '"Manrope", "Inter", system-ui, sans-serif';
 const SANS = '"Inter", system-ui, sans-serif';
+const BOOK_SERIF = '"Iowan Old Style", Baskerville, Georgia, serif';
+
+const PURPOSE_LABELS: Record<string, string> = {
+  'mcp-integrations': 'MCP & INTEGRATIONS', 'voice-audio': 'VOICE & AUDIO', 'video-creative': 'VIDEO & CREATIVE',
+  'finance-trading': 'FINANCE & TRADING', 'security-privacy': 'SECURITY & PRIVACY', 'mobile-devices': 'MOBILE & DEVICES',
+  'knowledge-memory': 'KNOWLEDGE & MEMORY', 'models-learning': 'MODELS & LEARNING', 'agents-assistants': 'AGENTS & ASSISTANTS',
+  'web-automation': 'WEB & AUTOMATION', 'developer-tools': 'DEVELOPER TOOLS', 'data-infrastructure': 'DATA & INFRASTRUCTURE',
+  unshelved: 'UNSHELVED COLLECTION',
+};
+
+const PURPOSE_COLORS: Record<string, [string, string]> = {
+  'mcp-integrations': ['#173f53', '#66d4c5'], 'voice-audio': ['#672f3a', '#ef9b79'], 'video-creative': ['#4a356b', '#e7bf63'],
+  'finance-trading': ['#244d3c', '#d6b65d'], 'security-privacy': ['#313840', '#e06757'], 'mobile-devices': ['#145a62', '#e5c954'],
+  'knowledge-memory': ['#253e63', '#d8c99d'], 'models-learning': ['#493b73', '#8fd2d0'], 'agents-assistants': ['#65382e', '#e2b765'],
+  'web-automation': ['#28547a', '#e99058'], 'developer-tools': ['#315742', '#a7c86a'], 'data-infrastructure': ['#354b5c', '#6ec0c2'],
+  unshelved: ['#5a4a3e', '#c9b28d'],
+};
+
+function seedOf(value: string): number {
+  let seed = 2166136261;
+  for (let index = 0; index < value.length; index += 1) seed = Math.imul(seed ^ value.charCodeAt(index), 16777619);
+  return seed >>> 0;
+}
+
+function catalogColors(r: Repo): { cloth: string; accent: string; paper: string; ink: string } {
+  const [cloth, accent] = PURPOSE_COLORS[r.shelfId] ?? PURPOSE_COLORS.unshelved;
+  if (r.catalog?.kind === 'reference-copy') return { cloth: desaturate(cloth, 0.72), accent: '#9d5547', paper: '#e9e2d3', ink: '#303338' };
+  if (r.catalog?.kind === 'authored-fork') return { cloth: '#714822', accent, paper: '#f0e6d2', ink: '#29231d' };
+  return { cloth, accent, paper: '#f2ead8', ink: '#25231f' };
+}
+
+function clothBackground(ctx: CanvasRenderingContext2D, width: number, height: number, color: string): void {
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = 'rgba(255,255,255,.035)';
+  for (let x = 0; x < width; x += 4) ctx.fillRect(x, 0, 1, height);
+  ctx.fillStyle = 'rgba(0,0,0,.055)';
+  for (let y = 0; y < height; y += 5) ctx.fillRect(0, y, width, 1);
+  const shade = ctx.createRadialGradient(width * 0.52, height * 0.42, width * 0.1, width * 0.5, height * 0.5, height * 0.72);
+  shade.addColorStop(0, 'rgba(255,255,255,.08)');
+  shade.addColorStop(1, 'rgba(0,0,0,.22)');
+  ctx.fillStyle = shade;
+  ctx.fillRect(0, 0, width, height);
+}
+
+function catalogMotif(ctx: CanvasRenderingContext2D, r: Repo, cx: number, cy: number, radius: number, accent: string): void {
+  const seed = seedOf(r.name);
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(((seed % 31) - 15) * Math.PI / 180);
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = Math.max(2, radius * 0.018);
+  ctx.globalAlpha = 0.88;
+  const sides = 3 + (seed % 5);
+  for (let ring = 0; ring < 3; ring += 1) {
+    const rr = radius * (0.42 + ring * 0.22);
+    ctx.beginPath();
+    for (let point = 0; point <= sides; point += 1) {
+      const angle = (point / sides) * Math.PI * 2 + ring * 0.18;
+      const x = Math.cos(angle) * rr;
+      const y = Math.sin(angle) * rr;
+      if (point === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 0.32;
+  for (let line = -2; line <= 2; line += 1) {
+    ctx.beginPath();
+    ctx.moveTo(-radius, line * radius * 0.22);
+    ctx.lineTo(radius, -line * radius * 0.15);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawCatalogSpine(r: Repo): HTMLCanvasElement {
+  const W = 128;
+  const H = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
+  const colors = catalogColors(r);
+  clothBackground(ctx, W, H, colors.cloth);
+  const reference = r.catalog!.kind === 'reference-copy';
+  if (reference) {
+    ctx.fillStyle = colors.paper;
+    ctx.fillRect(18, 58, W - 36, H - 116);
+    ctx.strokeStyle = 'rgba(48,51,56,.28)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(18, 58, W - 36, H - 116);
+  } else {
+    ctx.fillStyle = colors.accent;
+    ctx.fillRect(0, 24, W, 8);
+    ctx.fillRect(0, H - 32, W, 8);
+    ctx.fillStyle = 'rgba(255,255,255,.15)';
+    for (const y of [62, H - 68]) ctx.fillRect(0, y, W, 3);
+  }
+  const grad = ctx.createLinearGradient(0, 0, W, 0);
+  grad.addColorStop(0, 'rgba(0,0,0,.35)');
+  grad.addColorStop(.45, 'rgba(255,255,255,.08)');
+  grad.addColorStop(1, 'rgba(0,0,0,.3)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  ctx.rotate(Math.PI / 2);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = reference ? colors.ink : '#f7f0df';
+  const title = displayName(r.name);
+  const px = fitText(ctx, title, H - 190, 42, 18, BOOK_SERIF, 700);
+  ctx.font = `700 ${px}px ${BOOK_SERIF}`;
+  ctx.fillText(title, 0, -5);
+  ctx.font = `600 13px ${SANS}`;
+  ctx.fillStyle = colors.accent;
+  const edition = reference ? 'REFERENCE EDITION' : r.catalog!.kind === 'authored-fork' ? 'ADAPTED EDITION' : "IVAN'S ORIGINAL";
+  ctx.fillText(edition, 0, px / 2 + 17);
+  ctx.restore();
+  ctx.fillStyle = reference ? colors.accent : '#f4ead4';
+  ctx.font = `700 12px ${SANS}`;
+  ctx.textAlign = 'center';
+  ctx.fillText((PURPOSE_LABELS[r.shelfId] ?? 'COLLECTION').split(' ')[0], W / 2, H - 12);
+  if (r.catalog!.cardStale || r.catalog!.verificationStatus === 'unverified') {
+    ctx.fillStyle = '#a33f35';
+    ctx.fillRect(W - 12, 0, 12, H);
+  }
+  return canvas;
+}
+
+function drawCatalogCover(r: Repo): HTMLCanvasElement {
+  const W = 512;
+  const H = 768;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
+  const colors = catalogColors(r);
+  const meta = r.catalog!;
+  const reference = meta.kind === 'reference-copy';
+  clothBackground(ctx, W, H, colors.cloth);
+  ctx.strokeStyle = reference ? 'rgba(48,51,56,.35)' : colors.accent;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(32, 32, W - 64, H - 64);
+  ctx.strokeRect(42, 42, W - 84, H - 84);
+
+  if (reference) {
+    ctx.fillStyle = colors.paper;
+    ctx.fillRect(62, 90, W - 124, H - 180);
+    ctx.strokeStyle = 'rgba(48,51,56,.25)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(62, 90, W - 124, H - 180);
+  } else {
+    catalogMotif(ctx, r, W / 2, 450, 100, colors.accent);
+    if (meta.kind === 'authored-fork') {
+      ctx.fillStyle = colors.accent;
+      ctx.fillRect(42, 42, 30, H - 84);
+    }
+  }
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = colors.accent;
+  ctx.font = `700 15px ${SANS}`;
+  ctx.fillText(PURPOSE_LABELS[r.shelfId] ?? 'REPOSITORY COLLECTION', W / 2, 82);
+
+  ctx.fillStyle = reference ? colors.ink : '#f7f0df';
+  ctx.textBaseline = 'top';
+  const title = displayName(r.name);
+  let px = 58;
+  ctx.font = `700 ${px}px ${BOOK_SERIF}`;
+  let lines = wrap(ctx, title, W - (reference ? 170 : 115));
+  while (lines.length > 3 && px > 30) {
+    px -= 4;
+    ctx.font = `700 ${px}px ${BOOK_SERIF}`;
+    lines = wrap(ctx, title, W - (reference ? 170 : 115));
+  }
+  let y = reference ? 140 : 120;
+  for (const line of lines.slice(0, 3)) {
+    ctx.fillText(line, W / 2, y);
+    y += px * 1.02;
+  }
+
+  if (reference) {
+    ctx.strokeStyle = colors.accent;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(110, y + 16);
+    ctx.lineTo(W - 110, y + 16);
+    ctx.stroke();
+    ctx.fillStyle = colors.accent;
+    ctx.font = `700 16px ${SANS}`;
+    ctx.fillText('REFERENCE EDITION', W / 2, y + 34);
+    ctx.fillStyle = colors.ink;
+    ctx.font = `500 17px ${SANS}`;
+    const source = `SOURCE · ${meta.upstream ?? 'UNKNOWN'}`;
+    const sourcePx = fitText(ctx, source, W - 170, 17, 11, SANS, 500);
+    ctx.font = `500 ${sourcePx}px ${SANS}`;
+    ctx.fillText(source, W / 2, y + 72);
+    catalogMotif(ctx, r, W / 2, 475, 60, colors.accent);
+  } else {
+    ctx.fillStyle = 'rgba(247,240,223,.82)';
+    ctx.font = `500 16px ${SANS}`;
+    const byline = meta.kind === 'original' ? 'AN ORIGINAL REPOSITORY BY IVAN GEGOV' : `ADAPTED FROM ${meta.upstream}`;
+    const bylinePx = fitText(ctx, byline, W - 130, 16, 11, SANS, 500);
+    ctx.font = `500 ${bylinePx}px ${SANS}`;
+    ctx.fillText(byline, W / 2, y + 22);
+  }
+
+  const summary = r.summary ?? r.github?.description ?? '';
+  ctx.font = `400 18px ${BOOK_SERIF}`;
+  ctx.fillStyle = reference ? colors.ink : 'rgba(247,240,223,.88)';
+  ctx.textBaseline = 'top';
+  let summaryY = 570;
+  for (const line of wrap(ctx, summary, W - 150).slice(0, 3)) {
+    ctx.fillText(line, W / 2, summaryY);
+    summaryY += 24;
+  }
+
+  const status = `${meta.alive ? 'ACTIVE' : 'DORMANT'} · PUSH ${r.lastCommitAt?.slice(0, 10) ?? 'UNKNOWN'}`;
+  ctx.fillStyle = reference ? colors.ink : '#f7f0df';
+  ctx.font = `600 13px ${SANS}`;
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(status, W / 2, 706);
+  const trust = [meta.cardStale ? 'STALE CARD' : '', meta.verificationStatus === 'unverified' ? 'UNVERIFIED' : ''].filter(Boolean).join(' · ');
+  if (trust) {
+    ctx.fillStyle = '#a33f35';
+    ctx.font = `800 12px ${SANS}`;
+    ctx.fillText(trust, W / 2, 732);
+  }
+  return canvas;
+}
 
 function drawSpine(r: Repo, staleDays: number): HTMLCanvasElement {
+  if (r.catalog) return drawCatalogSpine(r);
   const W = 256;
   const H = 1024;
   const canvas = document.createElement('canvas');
@@ -143,7 +376,7 @@ function drawSpine(r: Repo, staleDays: number): HTMLCanvasElement {
   ctx.shadowBlur = 0;
   ctx.font = `500 30px ${SANS}`;
   ctx.fillStyle = 'rgba(246,244,238,0.7)';
-  const foot = r.catalog?.kind === 'reference-copy' ? 'UPSTREAM WORK · REFERENCE' : r.catalog?.kind === 'authored-fork' ? `FORK · ${r.catalog.commitsAhead} AHEAD` : r.catalog?.kind === 'original' ? "IVAN'S ORIGINAL" : r.doc ? 'GUIDE' : r.virtual ? (r.repoSlug ? (r.visibility === 'private' ? '🔒 PRIVATE' : 'PUBLIC  ↗') : 'LINK  ↗') : languageOf(r).toUpperCase();
+  const foot = r.doc ? 'GUIDE' : r.virtual ? (r.repoSlug ? (r.visibility === 'private' ? '🔒 PRIVATE' : 'PUBLIC  ↗') : 'LINK  ↗') : languageOf(r).toUpperCase();
   ctx.fillText(foot, 0, px / 2 + 32);
   if (r.archived) {
     ctx.font = `700 22px ${SANS}`;
@@ -159,24 +392,11 @@ function drawSpine(r: Repo, staleDays: number): HTMLCanvasElement {
     ctx.strokeRect(10, 10, W - 20, H - 20);
     ctx.setLineDash([]);
   }
-  if (r.catalog?.kind === 'original') {
-    ctx.fillStyle = '#27c3a2';
-    ctx.fillRect(0, 0, 14, H);
-  } else if (r.catalog?.kind === 'authored-fork') {
-    ctx.fillStyle = '#e4a547';
-    ctx.fillRect(0, 0, 14, H);
-  }
-  if (r.catalog?.cardStale || r.catalog?.verificationStatus === 'unverified') {
-    ctx.font = `700 18px ${SANS}`;
-    ctx.fillStyle = '#f6d8d3';
-    ctx.textAlign = 'center';
-    ctx.fillText(r.catalog.cardStale ? 'STALE CARD' : 'UNVERIFIED', W / 2, 34);
-  }
-
   return canvas;
 }
 
 function drawCover(r: Repo, staleDays: number): HTMLCanvasElement {
+  if (r.catalog) return drawCatalogCover(r);
   const W = 768;
   const H = 1152;
   const canvas = document.createElement('canvas');
@@ -206,7 +426,7 @@ function drawCover(r: Repo, staleDays: number): HTMLCanvasElement {
   ctx.textAlign = 'center';
   ctx.fillStyle = 'rgba(246,244,238,0.75)';
   ctx.font = `500 30px ${SANS}`;
-  const attribution = r.catalog?.kind === 'reference-copy' ? 'UPSTREAM WORK · REFERENCE COPY' : r.catalog?.kind === 'authored-fork' ? `AUTHORED FORK · ${r.catalog.commitsAhead} COMMITS AHEAD` : r.catalog?.kind === 'original' ? "IVAN'S ORIGINAL" : r.doc ? 'HERMES AGENT · GUIDE' : r.virtual ? (r.repoSlug ? (r.visibility === 'private' ? '🔒 PRIVATE ON GITHUB' : 'PUBLIC ON GITHUB') : 'LINK  ↗') : languageOf(r).toUpperCase();
+  const attribution = r.doc ? 'HERMES AGENT · GUIDE' : r.virtual ? (r.repoSlug ? (r.visibility === 'private' ? '🔒 PRIVATE ON GITHUB' : 'PUBLIC ON GITHUB') : 'LINK  ↗') : languageOf(r).toUpperCase();
   ctx.fillText(attribution, W / 2, 165);
 
   ctx.fillStyle = '#f6f4ee';
@@ -245,11 +465,7 @@ function drawCover(r: Repo, staleDays: number): HTMLCanvasElement {
   if (r.commitCount) foot.push(`${r.commitCount} commits`);
   if (r.github?.stars) foot.push(`★ ${r.github.stars.toLocaleString()}`);
   if (r.dirtyCount) foot.push(`${r.dirtyCount} uncommitted`);
-  if (r.catalog?.upstream) foot.push(`upstream: ${r.catalog.upstream}`);
-  else if (r.virtual) foot.push('not cloned yet');
-  if (r.catalog) foot.push(`${r.catalog.alive ? 'ALIVE' : 'DORMANT'} · PUSH ${r.lastCommitAt?.slice(0, 10) ?? 'UNKNOWN'}`);
-  if (r.catalog?.cardStale) foot.push('STALE CARD');
-  if (r.catalog?.verificationStatus === 'unverified') foot.push('UNVERIFIED');
+  if (r.virtual) foot.push('not cloned yet');
   const footText = foot.join('  ·  ');
   const footPx = fitText(ctx, footText, W - 150, 33, 18, SANS, 500);
   ctx.font = `500 ${footPx}px ${SANS}`;
@@ -320,7 +536,16 @@ function drawPage(r: Repo): HTMLCanvasElement {
   if (r.visibility) facts.push(r.visibility);
   ctx.fillText(facts.join('  ·  '), W / 2, H - 120);
   ctx.font = `400 14px ${SANS}`;
-  ctx.fillText('README, commits, issues and pull requests are on the pages to the right', W / 2, H - 88);
+  if (r.catalog?.upstream) {
+    ctx.fillStyle = '#9a4d40';
+    ctx.font = `700 14px ${SANS}`;
+    ctx.fillText(`UPSTREAM SOURCE · ${r.catalog.upstream}`.toUpperCase(), W / 2, H - 88);
+    ctx.fillStyle = '#7a7268';
+    ctx.font = `400 13px ${SANS}`;
+    ctx.fillText(r.catalog.kind === 'reference-copy' ? 'Zero commits ahead · catalogued as reference, not original work' : `${r.catalog.commitsAhead} commits ahead in Ivan's fork`, W / 2, H - 62);
+  } else {
+    ctx.fillText(r.catalog ? "Original repository by Ivan Gegov" : 'README, commits, issues and pull requests are on the pages to the right', W / 2, H - 88);
+  }
   return canvas;
 }
 
@@ -337,7 +562,11 @@ function makeTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
 export function bookTextures(r: Repo, staleDays: number): { spine: THREE.CanvasTexture; cover: THREE.CanvasTexture; page: THREE.CanvasTexture } {
   const key = visualKey(r, staleDays);
   const hit = cache.get(r.id);
-  if (hit && hit.key === key) return hit;
+  if (hit && hit.key === key) {
+    cache.delete(r.id);
+    cache.set(r.id, hit);
+    return hit;
+  }
   if (hit) {
     hit.spine.dispose();
     hit.cover.dispose();
@@ -345,6 +574,15 @@ export function bookTextures(r: Repo, staleDays: number): { spine: THREE.CanvasT
   }
   const entry = { key, spine: makeTexture(drawSpine(r, staleDays)), cover: makeTexture(drawCover(r, staleDays)), page: makeTexture(drawPage(r)) };
   cache.set(r.id, entry);
+  while (cache.size > MAX_BOOK_TEXTURES) {
+    const oldestId = cache.keys().next().value as string | undefined;
+    if (!oldestId || oldestId === r.id) break;
+    const oldest = cache.get(oldestId);
+    cache.delete(oldestId);
+    oldest?.spine.dispose();
+    oldest?.cover.dispose();
+    oldest?.page.dispose();
+  }
   return entry;
 }
 

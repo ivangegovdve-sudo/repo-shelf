@@ -4,19 +4,30 @@ import { ShelfRow } from './Shelf';
 import { BOOK_DEPTH, FRAME_T, PLANK_T, ROW_H, SHELF_W, plankTopY } from './layout';
 import { woodTexture } from './textures';
 import { themeById } from '../themes';
+import { matches } from '../derive';
 
 export function Bookcase() {
   const shelves = useShelf((s) => s.shelves);
   const repos = useShelf((s) => s.repos);
+  const query = useShelf((s) => s.query);
+  const filter = useShelf((s) => s.filter);
+  const activeShelfId = useShelf((s) => s.activeShelfId);
+  const staleAfterDays = useShelf((s) => s.staleAfterDays);
+  const displayedRepos = useMemo(
+    () => repos.filter((repo) => matches(repo, query, filter, activeShelfId, staleAfterDays)),
+    [repos, query, filter, activeShelfId, staleAfterDays],
+  );
   const byShelf = useMemo(() => {
-    const m = new Map<string, typeof repos>();
+    const m = new Map<string, typeof displayedRepos>();
     for (const s of shelves) m.set(s.id, []);
-    for (const r of repos) m.get(r.shelfId)?.push(r);
+    for (const r of displayedRepos) m.get(r.shelfId)?.push(r);
     return m;
-  }, [shelves, repos]);
+  }, [shelves, displayedRepos]);
   const wood = woodTexture();
   const theme = useShelf((s) => themeById(s.themeId));
   const caseStyle = useShelf((s) => s.caseStyle);
+  const scrollRow = useShelf((s) => s.scrollRow);
+  const selectedRepoId = useShelf((s) => s.selectedRepoId);
   const frame = theme.scene.frame;
   const ft = caseStyle === 'modern' ? FRAME_T * 0.4 : FRAME_T;
 
@@ -26,6 +37,7 @@ export function Bookcase() {
   const height = top - bottom;
   const midY = (top + bottom) / 2;
   const depth = BOOK_DEPTH + 0.6;
+  const selectedShelf = selectedRepoId ? repos.find((repo) => repo.id === selectedRepoId)?.shelfId : null;
 
   return (
     <group>
@@ -65,9 +77,9 @@ export function Bookcase() {
         </>
       )}
 
-      {shelves.map((s, i) => (
-        <ShelfRow key={s.id} shelf={s} row={i} repos={byShelf.get(s.id) ?? []} />
-      ))}
+      {shelves.map((s, i) => {
+        return <ShelfRow key={s.id} shelf={s} row={i} repos={byShelf.get(s.id) ?? []} detailed={Math.abs(i - scrollRow) <= 1 || selectedShelf === s.id} />;
+      })}
     </group>
   );
 }

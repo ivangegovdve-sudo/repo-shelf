@@ -193,10 +193,10 @@ export const useShelf = create<ShelfState>()((set, get) => ({
     set((st) => ({ repos: st.repos.map((x) => (x.id === r.id ? { ...x, ...r } : x)) }));
   },
 
-  setQuery: (query) => set({ query }),
-  setFilter: (filter) => set({ filter }),
-  setActiveShelf: (activeShelfId) => set({ activeShelfId }),
-  clearFilters: () => set({ query: '', filter: 'all', activeShelfId: 'all' }),
+  setQuery: (query) => set({ query, rowOffsets: {} }),
+  setFilter: (filter) => set({ filter, rowOffsets: {} }),
+  setActiveShelf: (activeShelfId) => set({ activeShelfId, rowOffsets: {} }),
+  clearFilters: () => set({ query: '', filter: 'all', activeShelfId: 'all', rowOffsets: {} }),
   select: (selectedRepoId) => set((st) => ({ selectedRepoId, hoveredRepoId: null, focus: selectedRepoId ? st.focus : null })),
   hover: (hoveredRepoId) => set({ hoveredRepoId }),
 

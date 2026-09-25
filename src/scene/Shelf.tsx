@@ -4,16 +4,17 @@ import type { Repo, Shelf as ShelfT } from '../types';
 import { useShelf } from '../store';
 import { Book } from './Book';
 import { layoutRow, plankTopY, PLANK_T, ROW_H, SHELF_W, SIDE_PAD, USABLE_W, BOOK_DEPTH } from './layout';
-import { backPanelTexture, woodTexture } from './textures';
+import { backPanelTexture, baseColor, woodTexture } from './textures';
 import { themeById } from '../themes';
 
 interface Props {
   shelf: ShelfT;
   row: number;
   repos: Repo[];
+  detailed?: boolean;
 }
 
-export function ShelfRow({ shelf, row, repos }: Props) {
+export function ShelfRow({ shelf, row, repos, detailed = true }: Props) {
   const plankY = plankTopY(row);
   const { slots, totalWidth } = useMemo(() => layoutRow(repos), [repos]);
   const dragOver = useShelf((s) => s.drag?.overShelfId === shelf.id);
@@ -24,6 +25,7 @@ export function ShelfRow({ shelf, row, repos }: Props) {
   const startX = -SHELF_W / 2 + SIDE_PAD - Math.min(offset, overflow);
   const theme = useShelf((s) => themeById(s.themeId));
   const caseStyle = useShelf((s) => s.caseStyle);
+  const staleDays = useShelf((s) => s.staleAfterDays);
   const plankT = caseStyle === 'modern' ? PLANK_T * 0.55 : PLANK_T;
   const wood = woodTexture();
   const back = backPanelTexture(theme);
@@ -73,16 +75,21 @@ export function ShelfRow({ shelf, row, repos }: Props) {
         </mesh>
       )}
 
-      {visibleSlots.map((slot) => (
-        <Book
+      {visibleSlots.map((slot) => detailed ? (
+        <Book key={slot.repo.id} repo={slot.repo} x={startX + slot.x} y={plankY + slot.height / 2} width={slot.width} height={slot.height} plankY={plankY} />
+      ) : (
+        <mesh
           key={slot.repo.id}
-          repo={slot.repo}
-          x={startX + slot.x}
-          y={plankY + slot.height / 2}
-          width={slot.width}
-          height={slot.height}
-          plankY={plankY}
-        />
+          position={[startX + slot.x, plankY + slot.height / 2, -0.08]}
+          onClick={(event) => {
+            event.stopPropagation();
+            useShelf.getState().setScrollRow(row);
+            useShelf.getState().select(slot.repo.id);
+          }}
+        >
+          <boxGeometry args={[slot.width, slot.height, BOOK_DEPTH]} />
+          <meshStandardMaterial color={baseColor(slot.repo, staleDays)} roughness={0.88} />
+        </mesh>
       ))}
 
       <Html position={[0, plankY - plankT / 2, BOOK_DEPTH / 2 + 0.22]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
