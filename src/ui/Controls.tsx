@@ -1,8 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useShelf, selectVisibleRepos, isFiltering } from '../store';
-import { languageCounts, type Filter } from '../derive';
-
-type Chip = { key: Filter; label: string; count?: number; edition?: 'original' | 'adapted' | 'reference' };
+import { filterChips } from '../derive';
 
 export function Controls() {
   const query = useShelf((s) => s.query);
@@ -36,27 +34,7 @@ export function Controls() {
   }, [setQuery]);
 
   const catalog = repos.some((repo) => repo.catalog);
-  const count = (pred: (r: (typeof repos)[number]) => boolean) => repos.filter(pred).length;
-  const chips: Chip[] = catalog
-    ? [
-        { key: 'all', label: 'All', count: repos.length },
-        { key: 'originals', label: 'Originals', count: count((r) => r.catalog?.kind === 'original'), edition: 'original' },
-        { key: 'authored-fork', label: 'Adapted forks', count: count((r) => r.catalog?.kind === 'authored-fork'), edition: 'adapted' },
-        { key: 'reference-copy', label: 'Reference copies', count: count((r) => r.catalog?.kind === 'reference-copy'), edition: 'reference' },
-        { key: 'card-stale', label: 'Stale cards', count: count((r) => Boolean(r.catalog?.cardStale)) },
-        { key: 'unverified', label: 'Unverified', count: count((r) => r.catalog?.verificationStatus === 'unverified') },
-      ]
-    : [
-        { key: 'all', label: 'All repos', count: repos.length },
-        ...languageCounts(repos)
-          .slice(0, 6)
-          .map((l) => ({ key: `lang:${l.language}` as Filter, label: l.language, count: l.count })),
-        { key: 'remote', label: 'Has remote' },
-        { key: 'dirty', label: 'Dirty' },
-        { key: 'stale', label: 'Stale' },
-        ...(repos.some((r) => r.visibility) ? ([{ key: 'public', label: 'Public' }, { key: 'private', label: 'Private' }] as Chip[]) : []),
-        ...(repos.some((r) => r.archived) ? ([{ key: 'archived', label: 'Archived' }] as Chip[]) : []),
-      ];
+  const chips = filterChips(repos);
 
   return (
     <section className="controls">

@@ -122,6 +122,20 @@ export function catalogToState(value: unknown): AppState {
   return { shelves, repos, github: { available: false, login: null }, config: { staleAfterDays: 365 } };
 }
 
+/**
+ * Catalog books first, then the local shelves. An on-disk clone is always kept, even of a
+ * cataloged repo: it is what can be opened, moved and renamed. Only virtual GitHub books that
+ * duplicate a catalog entry are dropped, since the catalog book already stands for them.
+ */
+export function mergeCatalog(catalog: AppState | null, shelves: Shelf[], repos: Repo[]): { shelves: Shelf[]; repos: Repo[] } {
+  if (!catalog) return { shelves, repos };
+  const slugs = new Set(catalog.repos.map((repo) => repo.repoSlug?.toLowerCase()).filter(Boolean));
+  return {
+    shelves: [...catalog.shelves, ...shelves],
+    repos: [...catalog.repos, ...repos.filter((repo) => !repo.virtual || !repo.repoSlug || !slugs.has(repo.repoSlug.toLowerCase()))],
+  };
+}
+
 export function loadCatalogFile(file: string): AppState | null {
   if (!fs.existsSync(file)) return null;
   return catalogToState(JSON.parse(fs.readFileSync(file, 'utf8')) as unknown);

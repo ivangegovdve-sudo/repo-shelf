@@ -211,3 +211,40 @@ export function languageCounts(repos: Repo[]): { language: string; count: number
     .map(([language, count]) => ({ language, count }))
     .sort((a, b) => b.count - a.count || a.language.localeCompare(b.language));
 }
+
+export interface FilterChip {
+  key: Filter;
+  label: string;
+  count?: number;
+  edition?: 'original' | 'adapted' | 'reference';
+}
+
+/**
+ * Toolbar filters. The bundled catalog sits beside folder and GitHub shelves, so when both kinds
+ * of book are present both sets of filters are offered. Counts are what the filter will show.
+ */
+export function filterChips(repos: Repo[]): FilterChip[] {
+  const catalog = repos.some((r) => r.catalog);
+  const local = repos.filter((r) => !r.catalog);
+  const count = (pred: (r: Repo) => boolean) => repos.filter(pred).length;
+  const chips: FilterChip[] = [{ key: 'all', label: local.length ? 'All repos' : 'All', count: repos.length }];
+  if (catalog) {
+    chips.push(
+      { key: 'originals', label: 'Originals', count: count((r) => r.catalog?.kind === 'original'), edition: 'original' },
+      { key: 'authored-fork', label: 'Adapted forks', count: count((r) => r.catalog?.kind === 'authored-fork'), edition: 'adapted' },
+      { key: 'reference-copy', label: 'Reference copies', count: count((r) => r.catalog?.kind === 'reference-copy'), edition: 'reference' },
+      { key: 'card-stale', label: 'Stale cards', count: count((r) => Boolean(r.catalog?.cardStale)) },
+      { key: 'unverified', label: 'Unverified', count: count((r) => r.catalog?.verificationStatus === 'unverified') },
+    );
+  }
+  if (local.length) {
+    // Languages are picked from the local repos, but counted over every book the filter will show.
+    for (const { language } of languageCounts(local).slice(0, catalog ? 4 : 6)) {
+      chips.push({ key: `lang:${language}`, label: language, count: count((r) => languageOf(r) === language) });
+    }
+    chips.push({ key: 'remote', label: 'Has remote' }, { key: 'dirty', label: 'Dirty' }, { key: 'stale', label: 'Stale' });
+    if (local.some((r) => r.visibility)) chips.push({ key: 'public', label: 'Public' }, { key: 'private', label: 'Private' });
+    if (local.some((r) => r.archived)) chips.push({ key: 'archived', label: 'Archived' });
+  }
+  return chips;
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { catalogToState, parseCatalog, type CatalogDocument, type CatalogRepo } from '../../server/catalog';
+import { catalogToState, mergeCatalog, parseCatalog, type CatalogDocument, type CatalogRepo } from '../../server/catalog';
+import type { Repo, Shelf } from '../../server/types';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -78,5 +79,24 @@ describe('bundled public catalog', () => {
     expect(state.repos.filter((repo) => repo.catalog?.kind === 'reference-copy').length).toBeGreaterThan(1_000);
     expect(state.repos.filter((repo) => repo.catalog?.kind === 'original').length).toBeGreaterThan(0);
     expect(state.repos.every((repo) => state.shelves.some((shelf) => shelf.id === repo.shelfId))).toBe(true);
+  });
+});
+
+describe('mergeCatalog', () => {
+  const local = (over: Partial<Repo>): Repo => ({
+    ...catalogToState(catalog([item()])).repos[0],
+    catalog: undefined, virtual: false, shelfId: 'disk', path: '/projects/voice-tool', ...over,
+  });
+  const diskShelf: Shelf = { id: 'disk', label: 'Projects', path: '/projects', kind: 'disk', hidden: false, repoCount: 1 };
+
+  it('keeps an on-disk clone of a cataloged repo, and drops only virtual GitHub duplicates', () => {
+    const cat = catalogToState(catalog([item()]));
+    const clone = local({ id: 'clone', repoSlug: 'ivangegovdve-sudo/voice-tool' });
+    const ghDuplicate = local({ id: 'gh', virtual: true, path: '', shelfId: 'gh', repoSlug: 'IvanGegovDVE-sudo/Voice-Tool' });
+    const other = local({ id: 'other', repoSlug: 'someone/else' });
+    const merged = mergeCatalog(cat, [diskShelf], [clone, ghDuplicate, other]);
+    expect(merged.repos.map((r) => r.id)).toEqual([cat.repos[0].id, 'clone', 'other']);
+    expect(merged.shelves.map((s) => s.id)).toEqual([...cat.shelves.map((s) => s.id), 'disk']);
+    expect(mergeCatalog(null, [diskShelf], [clone])).toEqual({ shelves: [diskShelf], repos: [clone] });
   });
 });

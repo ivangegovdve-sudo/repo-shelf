@@ -24,7 +24,7 @@ import { appendAudit } from './audit.js';
 import { PagesCache, buildPages } from './pages.js';
 import { buildStaticSite, publishSite } from './publish.js';
 import { EventHub } from './events.js';
-import { loadCatalogFile } from './catalog.js';
+import { loadCatalogFile, mergeCatalog } from './catalog.js';
 
 export interface AppDeps {
   configFile: string;
@@ -75,14 +75,7 @@ export async function createApp(deps: AppDeps): Promise<AppHandle> {
   const pagesCache = new PagesCache();
 
   function withCatalog(localShelves: Shelf[], localRepos: Repo[]): { shelves: Shelf[]; repos: Repo[] } {
-    if (!deps.catalogFile) return { shelves: localShelves, repos: localRepos };
-    const catalog = loadCatalogFile(deps.catalogFile);
-    if (!catalog) return { shelves: localShelves, repos: localRepos };
-    const catalogIds = new Set(catalog.repos.map((repo) => repo.repoSlug).filter(Boolean));
-    return {
-      shelves: [...catalog.shelves, ...localShelves],
-      repos: [...catalog.repos, ...localRepos.filter((repo) => !repo.repoSlug || !catalogIds.has(repo.repoSlug))],
-    };
+    return mergeCatalog(deps.catalogFile ? loadCatalogFile(deps.catalogFile) : null, localShelves, localRepos);
   }
 
   const state = (): AppState => ({

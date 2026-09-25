@@ -12,6 +12,7 @@ import {
   displayName,
   languageCounts,
   languageOf,
+  filterChips,
   MIN_HEIGHT,
   MAX_HEIGHT,
   MIN_THICKNESS,
@@ -186,5 +187,33 @@ describe('formatting', () => {
       { language: 'Go', count: 1 },
       { language: 'Python', count: 1 },
     ]);
+  });
+});
+
+describe('filterChips', () => {
+  const cat = (kind: NonNullable<Repo['catalog']>['kind'], language = 'Python') =>
+    repo({
+      id: `c-${kind}-${language}`, virtual: true, languageGuess: language,
+      catalog: {
+        kind, upstream: kind === 'original' ? null : 'up/x', commitsAhead: 0, repoUrl: 'https://github.com/ivan/x', cardStale: false,
+        verificationStatus: 'verified', confidence: 'high', cardGeneratedAt: '2026-09-20T00:00:00Z', alive: true,
+      },
+    });
+  const keys = (rs: Repo[]) => filterChips(rs).map((c) => c.key);
+
+  it('offers only the edition filters on a catalog-only shelf', () => {
+    expect(keys([cat('original'), cat('reference-copy')])).toEqual(['all', 'originals', 'authored-fork', 'reference-copy', 'card-stale', 'unverified']);
+  });
+
+  it('keeps the folder-repo filters when the catalog sits beside local shelves', () => {
+    const mixed = [cat('original', 'Python'), cat('reference-copy', 'Python'), repo({ id: 'a', languageGuess: 'Python' }), repo({ id: 'b', languageGuess: 'Rust', visibility: 'private' })];
+    const chips = filterChips(mixed);
+    expect(chips.map((c) => c.key)).toEqual(['all', 'originals', 'authored-fork', 'reference-copy', 'card-stale', 'unverified', 'lang:Python', 'lang:Rust', 'remote', 'dirty', 'stale', 'public', 'private']);
+    // A language chip counts every book its filter will show, catalog books included.
+    expect(chips.find((c) => c.key === 'lang:Python')?.count).toBe(mixed.filter((r) => matches(r, '', 'lang:Python', 'all', 90, NOW)).length);
+  });
+
+  it('matches the folder-only toolbar when there is no catalog', () => {
+    expect(keys([repo({ id: 'a' })])).toEqual(['all', 'lang:Python', 'remote', 'dirty', 'stale']);
   });
 });
