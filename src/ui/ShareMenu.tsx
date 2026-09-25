@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useShelf } from '../store';
 import { api } from '../api';
 import { isStaticSite } from '../static';
-import { bytesToDataUrl, downloadDataUrl, orbitGif, rewindGif, shelfiePng } from '../share/capture';
+import { bytesToDataUrl, downloadDataUrl, panGif, rewindGif, shelfiePng } from '../share/capture';
 
 type Job = { label: string; done: number; total: number } | null;
 
@@ -75,12 +75,12 @@ export function ShareMenu() {
             className="theme-opt"
             role="menuitem"
             onClick={() =>
-              run('Orbit GIF', async (p) => ({ dataUrl: await bytesToDataUrl(await orbitGif({ onProgress: p }), 'image/gif'), name: `${who}repo-shelf-orbit-${stamp()}.gif` }))
+              run('Pan GIF', async (p) => ({ dataUrl: await bytesToDataUrl(await panGif({ onProgress: p }), 'image/gif'), name: `${who}repo-shelf-pan-${stamp()}.gif` }))
             }
           >
             <span className="theme-text">
-              <b>Orbit GIF</b>
-              <small>The camera sweeps around your bookcase. ~3 s loop, 720px.</small>
+              <b>Pan GIF</b>
+              <small>The camera glides along the whole wall and back. ~3 s loop, 720px.</small>
             </span>
           </button>
           <button

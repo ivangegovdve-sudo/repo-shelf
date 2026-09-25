@@ -8,6 +8,8 @@ import { Dialogs } from './ui/Dialogs';
 import { Toasts } from './ui/Toasts';
 import { ViewControls } from './ui/ViewControls';
 import { RewindOverlay } from './ui/Rewind';
+import { WallOverlay } from './ui/WallOverlay';
+import { WallMap } from './ui/WallMap';
 import { staticData } from './static';
 
 export function App() {
@@ -63,6 +65,8 @@ export function App() {
         ) : (
           <div className="scene-wrap">
             <Scene />
+            <WallOverlay />
+            <WallMap />
             <ViewControls />
             <RewindOverlay />
           </div>

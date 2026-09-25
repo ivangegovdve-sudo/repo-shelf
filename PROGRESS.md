@@ -23,15 +23,26 @@ Target: every book spine-out, at least 150 legible spines in one window, edition
   3. **Silhouette.** Originals are the widest and tallest, reference copies the narrowest and shortest. Reference copies carry a library call-number sticker at the foot.
   Within each bay, originals come first, then adapted forks, then reference copies.
 - Upstream attribution: the hover and keyboard-focus tooltip for any fork names the upstream. For a reference copy the tooltip leads with "Reference copy of owner/name, not Ivan's work". The fold-out window, the cover, and the screen-reader index repeat it.
-- Textures: spines draw lazily into shelf-packed 1024² atlas pages at 320 texels per spine height, with a hard page cap and LRU page eviction. Covers and pages are generated only for the open book, using the existing 8-entry detail cache.
+- Textures: spines draw lazily into shelf-packed 1024² atlas pages at 256 texels per spine height, capped at 16 pages with LRU page eviction. Covers and pages are generated only for the open book, in a detail cache cut from 8 entries to 6.
 - Clicking a spine opens a floating window with a 3D viewer (the existing hinged book turns from spine to cover, and the cover opens to the first page), plus the description, facts, and links. Clicking another spine swaps the window's contents.
+
+## Checkpoint 2: the wall works end to end
+
+All numbers below come from the full local build of all 1,256 books (`npm run build:library:local`), rendered at 1920×1080.
+
+- **Density:** four rows at a 220 px pitch, with 283–342 whole spines in any window along the wall (worst window 296 for the 1,192-book public catalog). At 1440×900 the worst window holds 163, and at 1366×768 it holds 153.
+- **Draw calls:** 9 for the whole wall: structure, planks, bookends, back, shade, one fallback instanced mesh, and one instanced mesh per atlas page.
+- **Lazy lettering:** the first view letters 366 spines into 4 atlas pages (21.3 MiB) in 12 uploads, with about 0.35 ms of CPU paint per spine.
+- **Interactions checked in a browser (Playwright with Chromium, SwiftShader):** hover tooltip naming the upstream; click opens the window; clicking another spine swaps it; the cover opens to the first page; arrows move a gold focus ring with a live-region announcement; Enter opens and Esc closes.
+- **Tests:** 109/109, the original 90 plus 19 new (wall layout, density at three screen sizes, edition from spine, texture budget).
 
 ## Checkpoint log
 
 - [x] Baseline repaired (catalog regenerated), 90/90
-- [ ] Wall layout + edition encoding + tests
-- [ ] Spine atlas + budget
-- [ ] Wall rendering, camera, input
-- [ ] Overlays, toolbar
-- [ ] Fold-out window
-- [ ] Full 1,256 build: FPS + cache measured
+- [x] Wall layout + edition encoding + tests
+- [x] Spine atlas + budget (worst case 140.1 MiB < 160)
+- [x] Wall rendering, camera, input
+- [x] Overlays, toolbar
+- [x] Fold-out window
+- [ ] Full 1,256 build: FPS + cache measured across a full scroll
+- [ ] e2e, docs, other viewports and themes

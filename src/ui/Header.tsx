@@ -29,6 +29,7 @@ export function Header() {
           <rect x="20" y="8" width="7" height="18" rx="1" fill="#c9a227" />
         </svg>
         <span className="wordmark">repo shelf.</span>
+        {staticData() && <span className="hdr-title">{staticData()!.title}</span>}
       </div>
       <nav className="hdr-nav">
         {isStaticSite() && (

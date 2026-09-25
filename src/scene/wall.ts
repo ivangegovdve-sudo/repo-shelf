@@ -135,13 +135,14 @@ export function fitBayWidth(widths: number[], rows: number): number {
   return hi;
 }
 
-export function layoutWall(shelves: Shelf[], byShelf: Map<string, Repo[]>, m: WallMetrics): WallLayout {
+/** `keepEmpty` keeps a bay for shelves with no books (a drop target, or an empty folder shelf); filtered views skip them. */
+export function layoutWall(shelves: Shelf[], byShelf: Map<string, Repo[]>, m: WallMetrics, keepEmpty = false): WallLayout {
   const bays: BayLayout[] = [];
   const spines: SpineSlot[] = [];
   let x = WALL.END;
   for (const shelf of shelves) {
     const list = byShelf.get(shelf.id) ?? [];
-    if (!list.length) continue;
+    if (!list.length && !keepEmpty) continue;
     const sized = [...list].sort(compareOnShelf).map((repo) => ({ repo, edition: editionOf(repo), ...spineSize(repo, m) }));
     const inner = fitBayWidth(sized.map((s) => s.w), m.rows);
     if (bays.length) x += WALL.DIVIDER;

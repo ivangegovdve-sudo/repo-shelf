@@ -28,9 +28,6 @@ export const CASE_STYLES: { id: CaseStyle; name: string; description: string }[]
   { id: 'floating', name: 'Floating', description: 'Planks only, nothing else in the way' },
 ];
 
-export const ZOOM_MIN = 0.2;
-export const ZOOM_MAX = 8;
-
 export interface DragState {
   repoId: string;
   overShelfId: string | null;
@@ -56,15 +53,12 @@ export interface ShelfState {
   activeShelfId: string;
   selectedRepoId: string | null;
   hoveredRepoId: string | null;
+  /** Keyboard focus on the wall: arrows move it, Enter opens it. */
+  focusedRepoId: string | null;
   drag: DragState | null;
   dialog: Dialog | null;
   toasts: Toast[];
-  scrollRow: number;
-  rowOffsets: Record<string, number>;
   busy: boolean;
-  zoom: number;
-  orbit: { yaw: number; pitch: number };
-  focus: { x: number; y: number } | null;
   themeId: string;
   pages: Record<string, RepoPages>;
   setPages: (repoId: string, pages: RepoPages) => void;
@@ -87,6 +81,7 @@ export interface ShelfState {
   clearFilters: () => void;
   select: (id: string | null) => void;
   hover: (id: string | null) => void;
+  setFocused: (id: string | null) => void;
   startDrag: (repoId: string) => void;
   dragOver: (shelfId: string | null) => void;
   endDrag: (drop: boolean) => void;
@@ -94,12 +89,6 @@ export interface ShelfState {
   closeDialog: () => void;
   toast: (kind: Toast['kind'], text: string) => void;
   dismissToast: (id: number) => void;
-  setScrollRow: (row: number) => void;
-  setRowOffset: (shelfId: string, offset: number) => void;
-  setZoom: (z: number) => void;
-  setOrbit: (yaw: number, pitch: number) => void;
-  setFocus: (f: { x: number; y: number } | null) => void;
-  resetView: () => void;
   setTheme: (id: string) => void;
   setCaseStyle: (c: CaseStyle) => void;
   revealSecret: () => void;
@@ -137,15 +126,11 @@ export const useShelf = create<ShelfState>()((set, get) => ({
   activeShelfId: 'all',
   selectedRepoId: null,
   hoveredRepoId: null,
+  focusedRepoId: null,
   drag: null,
   dialog: null,
   toasts: [],
-  scrollRow: 0,
-  rowOffsets: {},
   busy: false,
-  zoom: 1,
-  orbit: { yaw: 0, pitch: 0 },
-  focus: null,
   themeId: loadThemeId(),
   pages: {},
   setPages: (repoId, pages) => set((st) => ({ pages: { ...st.pages, [repoId]: pages } })),
@@ -185,7 +170,6 @@ export const useShelf = create<ShelfState>()((set, get) => ({
       githubLogin: s.github.login,
       staleAfterDays: s.config.staleAfterDays,
       selectedRepoId: selected && s.repos.some((r) => r.id === selected) ? selected : null,
-      scrollRow: Math.min(get().scrollRow, Math.max(0, visible.length - 1)),
     });
   },
 
@@ -193,12 +177,13 @@ export const useShelf = create<ShelfState>()((set, get) => ({
     set((st) => ({ repos: st.repos.map((x) => (x.id === r.id ? { ...x, ...r } : x)) }));
   },
 
-  setQuery: (query) => set({ query, rowOffsets: {} }),
-  setFilter: (filter) => set({ filter, rowOffsets: {} }),
-  setActiveShelf: (activeShelfId) => set({ activeShelfId, rowOffsets: {} }),
-  clearFilters: () => set({ query: '', filter: 'all', activeShelfId: 'all', rowOffsets: {} }),
-  select: (selectedRepoId) => set((st) => ({ selectedRepoId, hoveredRepoId: null, focus: selectedRepoId ? st.focus : null })),
+  setQuery: (query) => set({ query }),
+  setFilter: (filter) => set({ filter }),
+  setActiveShelf: (activeShelfId) => set({ activeShelfId }),
+  clearFilters: () => set({ query: '', filter: 'all', activeShelfId: 'all' }),
+  select: (selectedRepoId) => set((st) => ({ selectedRepoId, focusedRepoId: selectedRepoId ?? st.focusedRepoId })),
   hover: (hoveredRepoId) => set({ hoveredRepoId }),
+  setFocused: (focusedRepoId) => set({ focusedRepoId }),
 
   startDrag: (repoId) => set({ drag: { repoId, overShelfId: null }, hoveredRepoId: null }),
   dragOver(shelfId) {
@@ -239,16 +224,7 @@ export const useShelf = create<ShelfState>()((set, get) => ({
   },
   dismissToast: (id) => set((st) => ({ toasts: st.toasts.filter((t) => t.id !== id) })),
 
-  setScrollRow(row) {
-    const max = Math.max(0, get().shelves.length - 1);
-    set({ scrollRow: Math.min(max, Math.max(0, row)) });
-  },
-  setRowOffset: (shelfId, offset) => set((st) => ({ rowOffsets: { ...st.rowOffsets, [shelfId]: offset } })),
   setBusy: (busy) => set({ busy }),
-  setZoom: (z) => set({ zoom: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)) }),
-  setOrbit: (yaw, pitch) => set({ orbit: { yaw, pitch } }),
-  setFocus: (focus) => set({ focus }),
-  resetView: () => set({ zoom: 1, orbit: { yaw: 0, pitch: 0 }, focus: null }),
   setTheme(id) {
     const t = themeById(id);
     saveThemeId(t.id);
@@ -270,8 +246,8 @@ export const useShelf = create<ShelfState>()((set, get) => ({
     set({ secretRevealed: true, shelves: all });
     if (hidden.length) {
       get().toast('info', `Secret shelf revealed: ${hidden.map((s) => s.label).join(', ')}`);
-      const row = all.findIndex((s) => s.hidden);
-      if (row >= 0) set({ scrollRow: row });
+      const first = get().repos.find((r) => r.shelfId === hidden[0].id);
+      if (first) set({ focusedRepoId: first.id });
     }
   },
 
