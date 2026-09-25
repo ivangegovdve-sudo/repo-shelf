@@ -99,4 +99,10 @@ What changed to get here:
   - Catalog repos deleted on GitHub from the app are remembered in `.cache/catalog-deleted.json` and stay off the wall.
   - `pages.yml` concurrency is per ref, so a PR run cannot cancel the main deploy.
   - 125/125 unit tests, 15/15 e2e.
+- [x] Codex review, round 5:
+  - Empty configured shelves keep their bay beside the catalog, so they stay drop targets; only empty catalog bays are left out.
+  - The Shelves dialog lists only configured shelves.
+  - Catalog books managed through a GitHub shelf can be dragged to change visibility or clone.
+  - The local full library is served with `npm run preview:library:local`, because browsers block its modules over `file://`.
+  - 130/130 unit tests, 15/15 e2e.
 - [ ] Real-GPU frame rate: needs `await __measureWall()` on Ivan's machine

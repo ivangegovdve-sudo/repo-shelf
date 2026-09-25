@@ -189,7 +189,13 @@ The checked-in catalog and public builds intentionally contain only the 1,192 re
 npm run build:library:local -- /path/to/repoindex/catalog.json
 ```
 
-Open `catalog-full-site/index.html` directly from disk. The command verifies that every catalog entry became exactly one book. That output is gitignored because it may contain non-public repository names; do not publish it or add it to a release.
+Then serve it on your own machine and open the address it prints (<http://localhost:4180>):
+
+```bash
+npm run preview:library:local
+```
+
+Browsers refuse the site's JavaScript modules over `file://`, so opening `index.html` directly from disk shows an empty page. The build command verifies that every catalog entry became exactly one book. That output is gitignored because it may contain non-public repository names; do not publish it or add it to a release.
 
 ## Provenance
 

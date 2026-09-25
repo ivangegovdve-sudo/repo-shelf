@@ -1,7 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useShelf } from '../store';
 import { api, ApiError } from '../api';
 import { validName } from '../validate';
+import { configurableShelves } from '../derive';
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   useEffect(() => {
@@ -312,7 +313,8 @@ function MkdirDialog() {
 }
 
 function ShelvesDialog() {
-  const shelves = useShelf((s) => s.allShelves);
+  const allShelves = useShelf((s) => s.allShelves);
+  const shelves = useMemo(() => configurableShelves(allShelves), [allShelves]);
   const close = useShelf((s) => s.closeDialog);
   const busy = useShelf((s) => s.busy);
   const runAction = useShelf((s) => s.runAction);

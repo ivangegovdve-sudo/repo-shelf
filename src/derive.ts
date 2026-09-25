@@ -153,6 +153,11 @@ export function matches(
   return q.split(/\s+/).every((term) => hay.includes(term));
 }
 
+/** Shelves from shelf.config.json, which can be added and removed. Catalog bays come from the bundled catalog instead. */
+export function configurableShelves<S extends { kind: string }>(shelves: S[]): S[] {
+  return shelves.filter((s) => s.kind !== 'catalog');
+}
+
 /** When a repo was created, for rewind; null when unknown (catalog books carry no creation date). */
 export function createdTime(r: Repo): number | null {
   const t = r.createdAt ? new Date(r.createdAt).getTime() : NaN;

@@ -1,15 +1,16 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { isFiltering, useShelf, type ShelfState } from '../store';
+import { useShelf } from '../store';
 import { matches, notYetCreated } from '../derive';
 import { themeById } from '../themes';
 import type { Repo } from '../types';
 import { backPanelTexture, bookTextures, sideColor, textureCacheStats, woodTexture } from './textures';
-import { WALL, bayAt, layoutWall, spineAt, stepSpine, wallMetrics, type WallLayout, type WallStep } from './wallLayout';
+import { WALL, layoutWall, spineAt, stepSpine, wallMetrics, type WallLayout, type WallStep } from './wallLayout';
 import { buildStructure, shadeTexture } from './wallStructure';
 import { PULL, SpineField } from './spineField';
 import { SPINE_FONT } from './spineAtlas';
+import { dropTarget, keepConfiguredBays, movable } from './wallDrag';
 import { useWall, wallView, type ScreenRect } from './wallStore';
 import { wallPoint } from './WallCamera';
 import './benchmark';
@@ -25,20 +26,6 @@ const KEY_STEPS: Record<string, WallStep> = {
   PageDown: 'next-bay',
 };
 
-/** Folder repos move between folder shelves; GitHub books change visibility or clone. Catalog books stay put. */
-function movable(repo: Repo, st: ShelfState): boolean {
-  if (st.readOnly || repo.catalog) return false;
-  if (repo.virtual && !repo.repoSlug) return false;
-  return st.shelves.some((s) => s.kind === 'disk' || s.kind === 'github');
-}
-
-function dropTarget(repo: Repo, layout: WallLayout, x: number): string | null {
-  const bay = bayAt(layout, x);
-  const shelf = bay?.shelf;
-  if (!shelf || shelf.id === repo.shelfId) return null;
-  if (repo.virtual) return shelf.kind === 'github' || shelf.kind === 'disk' ? shelf.id : null;
-  return shelf.kind === 'disk' ? shelf.id : null;
-}
 
 function firstVisible(layout: WallLayout): number {
   const i = layout.spines.findIndex((s) => s.x >= wallView.x0 + 8);
@@ -63,7 +50,6 @@ export function Wall() {
   const selected = useShelf((s) => s.selectedRepoId);
   const dragId = useShelf((s) => s.drag?.repoId ?? null);
   const overShelfId = useShelf((s) => s.drag?.overShelfId ?? null);
-  const filtering = useShelf(isFiltering);
   const occludeRight = useWall((s) => s.occludeRight);
 
   const displayed = useMemo(
@@ -80,8 +66,7 @@ export function Wall() {
     return m;
   }, [displayed]);
   const metrics = useMemo(() => wallMetrics(size.height), [size.height]);
-  const keepEmpty = !filtering && shelves.every((s) => s.kind !== 'catalog');
-  const layout = useMemo(() => layoutWall(shelves, byShelf, metrics, keepEmpty), [shelves, byShelf, metrics, keepEmpty]);
+  const layout = useMemo(() => layoutWall(shelves, byShelf, metrics, keepConfiguredBays), [shelves, byShelf, metrics]);
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
 

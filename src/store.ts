@@ -195,7 +195,7 @@ export const useShelf = create<ShelfState>()((set, get) => ({
     set({ drag: null });
     if (!d || !drop) return;
     const repo = get().repos.find((r) => r.id === d.repoId);
-    if (!repo || !d.overShelfId || d.overShelfId === repo.shelfId) return;
+    if (!repo || !d.overShelfId || d.overShelfId === repo.shelfId || d.overShelfId === repo.catalog?.githubShelfId) return;
     const target = get().allShelves.find((s) => s.id === d.overShelfId);
     if (!target) return;
     if (target.kind === 'github') {

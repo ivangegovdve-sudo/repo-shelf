@@ -26,6 +26,7 @@ async function main(): Promise<void> {
     throw new Error(`Expected ${document.repo_count} books but the local build contains ${result.repos}.`);
   }
   console.log(`Built all ${result.repos} catalog books on ${result.shelves} purpose shelves in ${result.dir}`);
+  console.log('Open it with `npm run preview:library:local` (browsers will not load it from file://).');
   console.log('Local-only output may contain non-public repository names. Do not publish it.');
 }
 
