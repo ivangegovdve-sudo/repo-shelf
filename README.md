@@ -8,6 +8,21 @@ Built with React Three Fiber, Express, and `gh`. Runs on your machine only. Wind
 
 ![repo shelf](docs/media/screenshot-shelf.png)
 
+## Build a static purpose library
+
+The catalog build turns a published `repoindex/catalog.json` into one self-contained HTML file. It has no database, server, network request, or API key and can be opened directly from disk with `file://`.
+
+```bash
+npm install
+npm run build:catalog -- ../repoindex/catalog.json --out catalog-site
+```
+
+Open `catalog-site/index.html`. The generated folder is ignored by git because it contains the catalog data; the public source repository only keeps the builder, UI, tests, and a small fictional fixture.
+
+This view organizes repositories by purpose derived from capability-card summaries and topics. It supports shelf filtering, name/description search, and an originals-only switch. Each book shows its one-line purpose, original/fork status, activity from the last push, and stale/unverified warnings. Forks with zero commits ahead are rendered as muted **reference copies**, distinct from originals and authored forks.
+
+The current derivation, shelf definitions, activity threshold, and snapshot counts are recorded in [docs/catalog-shelves.md](docs/catalog-shelves.md). The input contract is the `catalog.json` published from [`repoindex`](https://github.com/ivangegovdve-sudo/repoindex), with the supplied source snapshot archived in the [`catalog-20260925` release](https://github.com/ivangegovdve-sudo/repoindex/releases/tag/catalog-20260925).
+
 | The library door on your desktop | … swings open | … into the shelf |
 | --- | --- | --- |
 | ![door](docs/media/desktop-door.png) | ![door open](docs/media/desktop-door-open.png) | ![shelf window](docs/media/desktop-shelf.png) |

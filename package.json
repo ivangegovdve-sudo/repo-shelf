@@ -43,7 +43,8 @@
     "dist:win": "npm run build:desktop && electron-builder --win nsis portable",
     "dist:mac": "npm run build:desktop && electron-builder --mac dmg",
     "dist:linux": "npm run build:desktop && electron-builder --linux AppImage",
-    "build:static": "vite build --base ./ --outDir dist-static --emptyOutDir"
+    "build:static": "vite build --base ./ --outDir dist-static --emptyOutDir",
+    "build:catalog": "node --import tsx scripts/build-catalog-site.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",
