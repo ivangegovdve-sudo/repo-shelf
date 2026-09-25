@@ -131,6 +131,23 @@ describe('matches', () => {
     expect(matches(r, '', 'all', 's1', 90, NOW)).toBe(true);
     expect(matches(r, '', 'all', 's2', 90, NOW)).toBe(false);
   });
+  it('filters catalog attribution and searches summaries and upstream names', () => {
+    const reference = repo({
+      summary: 'A visual workflow editor',
+      catalog: {
+        kind: 'reference-copy', upstream: 'real/ComfyUI', commitsAhead: 0,
+        repoUrl: 'https://github.com/me/ComfyUI', cardStale: true,
+        verificationStatus: 'unverified', confidence: 'low', cardGeneratedAt: '2026-09-01T00:00:00Z', alive: true,
+      },
+    });
+    const original = repo({ catalog: { ...reference.catalog!, kind: 'original', upstream: null, commitsAhead: 2 } });
+    expect(matches(reference, 'workflow comfyui', 'all', 'all', 90, NOW)).toBe(true);
+    expect(matches(reference, '', 'reference-copy', 'all', 90, NOW)).toBe(true);
+    expect(matches(reference, '', 'originals', 'all', 90, NOW)).toBe(false);
+    expect(matches(original, '', 'originals', 'all', 90, NOW)).toBe(true);
+    expect(matches(reference, '', 'card-stale', 'all', 90, NOW)).toBe(true);
+    expect(matches(reference, '', 'unverified', 'all', 90, NOW)).toBe(true);
+  });
 });
 
 describe('displayName', () => {

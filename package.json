@@ -28,7 +28,7 @@
   ],
   "scripts": {
     "dev": "concurrently -k -n api,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
-    "dev:server": "tsx watch server/index.ts",
+    "dev:server": "node --watch --import tsx server/index.ts",
     "dev:web": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "start": "cross-env NODE_ENV=production tsx server/index.ts",
@@ -44,7 +44,8 @@
     "dist:mac": "npm run build:desktop && electron-builder --mac dmg",
     "dist:linux": "npm run build:desktop && electron-builder --linux AppImage",
     "build:static": "vite build --base ./ --outDir dist-static --emptyOutDir",
-    "build:catalog": "node --import tsx scripts/build-catalog-site.ts"
+    "catalog:refresh": "node --import tsx scripts/refresh-public-catalog.ts",
+    "build:pages": "npm run build:static && node --import tsx scripts/build-public-site.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",
@@ -91,6 +92,7 @@
       "desktop/**",
       "dist/**",
       "dist-static/**",
+      "data/**",
       "package.json"
     ],
     "asar": true,

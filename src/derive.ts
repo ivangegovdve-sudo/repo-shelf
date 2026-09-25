@@ -83,7 +83,7 @@ export function hasRedTab(r: Repo): boolean {
   return r.dirtyCount > 0;
 }
 
-export type Filter = 'all' | `lang:${string}` | 'remote' | 'dirty' | 'stale' | 'public' | 'private' | 'archived';
+export type Filter = 'all' | `lang:${string}` | 'remote' | 'dirty' | 'stale' | 'public' | 'private' | 'archived' | 'originals' | 'authored-fork' | 'reference-copy' | 'card-stale' | 'unverified';
 
 export function matches(
   r: Repo,
@@ -108,6 +108,14 @@ export function matches(
     if (!r.archived) return false;
   } else if (filter === 'stale') {
     if (!isStale(r, staleAfterDays, now)) return false;
+  } else if (filter === 'originals') {
+    if (r.catalog?.kind !== 'original') return false;
+  } else if (filter === 'authored-fork' || filter === 'reference-copy') {
+    if (r.catalog?.kind !== filter) return false;
+  } else if (filter === 'card-stale') {
+    if (!r.catalog?.cardStale) return false;
+  } else if (filter === 'unverified') {
+    if (r.catalog?.verificationStatus !== 'unverified') return false;
   }
   const q = query.trim().toLowerCase();
   if (!q) return true;
@@ -118,6 +126,8 @@ export function matches(
     languageOf(r),
     r.branch ?? '',
     r.repoSlug ?? '',
+    r.summary ?? '',
+    r.catalog?.upstream ?? '',
     ...(r.github?.topics ?? []),
   ]
     .join('\n')

@@ -16,7 +16,7 @@ export interface StaticShelfData {
   pages: Record<string, RepoPages>;
 }
 
-export const PROJECT_URL = 'https://github.com/BkashJEE/repo-shelf';
+export const PROJECT_URL = 'https://github.com/ivangegovdve-sudo/repo-shelf';
 
 function isPublic(r: Repo): boolean {
   if (r.visibility === 'private' || r.archived) return false;

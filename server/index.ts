@@ -27,6 +27,7 @@ const cacheDir = process.env.SHELF_CACHE ?? path.join(projectRoot, '.cache');
 const distDir = path.join(projectRoot, 'dist');
 const staticDist = process.env.SHELF_STATIC_DIST ?? path.join(projectRoot, 'dist-static');
 const exportsDir = process.env.SHELF_EXPORTS ?? path.join(projectRoot, 'shelf-exports');
+const catalogFile = process.env.SHELF_CATALOG ?? path.join(projectRoot, 'data', 'catalog.public.json');
 const serveStatic = process.env.NODE_ENV === 'production' || process.argv.includes('--serve');
 
 let handle: AppHandle | null = null;
@@ -41,6 +42,7 @@ async function main(): Promise<void> {
       staticDist,
       exportsDir,
       staticDir: serveStatic && fs.existsSync(distDir) ? distDir : undefined,
+      catalogFile,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

@@ -33,6 +33,13 @@ export function ShelfRow({ shelf, row, repos }: Props) {
   const canLeft = offset > 0;
   const canRight = offset < overflow - 0.01;
   const step = USABLE_W * 0.6;
+  // A catalog shelf may contain hundreds of books. Keep layout exact, but only
+  // mount books near the current viewport so canvas textures and WebGL meshes
+  // stay bounded as the row scrolls.
+  const visibleSlots = slots.filter((slot) => {
+    const sx = startX + slot.x;
+    return sx + slot.width / 2 >= -SHELF_W / 2 - 1 && sx - slot.width / 2 <= SHELF_W / 2 + 1;
+  });
 
   return (
     <group>
@@ -66,7 +73,7 @@ export function ShelfRow({ shelf, row, repos }: Props) {
         </mesh>
       )}
 
-      {slots.map((slot) => (
+      {visibleSlots.map((slot) => (
         <Book
           key={slot.repo.id}
           repo={slot.repo}

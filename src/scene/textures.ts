@@ -6,7 +6,7 @@ import type { Theme } from '../themes';
 const cache = new Map<string, { key: string; spine: THREE.CanvasTexture; cover: THREE.CanvasTexture; page: THREE.CanvasTexture }>();
 
 function visualKey(r: Repo, staleDays: number): string {
-  return [r.name, languageOf(r), r.dirtyCount > 0, r.github?.stars ?? 0, r.virtual ? 'link' : isStale(r, staleDays), r.github?.description ?? '', r.visibility, r.archived].join('|');
+  return [r.name, languageOf(r), r.dirtyCount > 0, r.github?.stars ?? 0, r.virtual ? 'link' : isStale(r, staleDays), r.github?.description ?? '', r.visibility, r.archived, r.catalog?.kind, r.catalog?.upstream, r.catalog?.cardStale, r.catalog?.verificationStatus, r.catalog?.alive, r.lastCommitAt].join('|');
 }
 
 function desaturate(hex: string, amount = 0.55): string {
@@ -35,6 +35,8 @@ function leatherFor(name: string): string {
 
 export function baseColor(r: Repo, staleDays: number): string {
   if (r.doc) return leatherFor(r.name);
+  if (r.catalog?.kind === 'reference-copy') return '#687078';
+  if (r.catalog?.kind === 'authored-fork') return '#8a5a2e';
   const c = bookColor(languageOf(r));
   if (r.virtual) return c;
   return isStale(r, staleDays) ? desaturate(c) : c;
@@ -141,7 +143,7 @@ function drawSpine(r: Repo, staleDays: number): HTMLCanvasElement {
   ctx.shadowBlur = 0;
   ctx.font = `500 30px ${SANS}`;
   ctx.fillStyle = 'rgba(246,244,238,0.7)';
-  const foot = r.doc ? 'GUIDE' : r.virtual ? (r.repoSlug ? (r.visibility === 'private' ? '🔒 PRIVATE' : 'PUBLIC  ↗') : 'LINK  ↗') : languageOf(r).toUpperCase();
+  const foot = r.catalog?.kind === 'reference-copy' ? 'UPSTREAM WORK · REFERENCE' : r.catalog?.kind === 'authored-fork' ? `FORK · ${r.catalog.commitsAhead} AHEAD` : r.catalog?.kind === 'original' ? "IVAN'S ORIGINAL" : r.doc ? 'GUIDE' : r.virtual ? (r.repoSlug ? (r.visibility === 'private' ? '🔒 PRIVATE' : 'PUBLIC  ↗') : 'LINK  ↗') : languageOf(r).toUpperCase();
   ctx.fillText(foot, 0, px / 2 + 32);
   if (r.archived) {
     ctx.font = `700 22px ${SANS}`;
@@ -156,6 +158,19 @@ function drawSpine(r: Repo, staleDays: number): HTMLCanvasElement {
     ctx.lineWidth = 4;
     ctx.strokeRect(10, 10, W - 20, H - 20);
     ctx.setLineDash([]);
+  }
+  if (r.catalog?.kind === 'original') {
+    ctx.fillStyle = '#27c3a2';
+    ctx.fillRect(0, 0, 14, H);
+  } else if (r.catalog?.kind === 'authored-fork') {
+    ctx.fillStyle = '#e4a547';
+    ctx.fillRect(0, 0, 14, H);
+  }
+  if (r.catalog?.cardStale || r.catalog?.verificationStatus === 'unverified') {
+    ctx.font = `700 18px ${SANS}`;
+    ctx.fillStyle = '#f6d8d3';
+    ctx.textAlign = 'center';
+    ctx.fillText(r.catalog.cardStale ? 'STALE CARD' : 'UNVERIFIED', W / 2, 34);
   }
 
   return canvas;
@@ -191,7 +206,8 @@ function drawCover(r: Repo, staleDays: number): HTMLCanvasElement {
   ctx.textAlign = 'center';
   ctx.fillStyle = 'rgba(246,244,238,0.75)';
   ctx.font = `500 30px ${SANS}`;
-  ctx.fillText(r.doc ? 'HERMES AGENT · GUIDE' : r.virtual ? (r.repoSlug ? (r.visibility === 'private' ? '🔒 PRIVATE ON GITHUB' : 'PUBLIC ON GITHUB') : 'LINK  ↗') : languageOf(r).toUpperCase(), W / 2, 165);
+  const attribution = r.catalog?.kind === 'reference-copy' ? 'UPSTREAM WORK · REFERENCE COPY' : r.catalog?.kind === 'authored-fork' ? `AUTHORED FORK · ${r.catalog.commitsAhead} COMMITS AHEAD` : r.catalog?.kind === 'original' ? "IVAN'S ORIGINAL" : r.doc ? 'HERMES AGENT · GUIDE' : r.virtual ? (r.repoSlug ? (r.visibility === 'private' ? '🔒 PRIVATE ON GITHUB' : 'PUBLIC ON GITHUB') : 'LINK  ↗') : languageOf(r).toUpperCase();
+  ctx.fillText(attribution, W / 2, 165);
 
   ctx.fillStyle = '#f6f4ee';
   ctx.textBaseline = 'top';
@@ -229,8 +245,15 @@ function drawCover(r: Repo, staleDays: number): HTMLCanvasElement {
   if (r.commitCount) foot.push(`${r.commitCount} commits`);
   if (r.github?.stars) foot.push(`★ ${r.github.stars.toLocaleString()}`);
   if (r.dirtyCount) foot.push(`${r.dirtyCount} uncommitted`);
-  if (r.virtual) foot.push('not cloned yet');
-  ctx.fillText(foot.join('  ·  '), W / 2, H - 165);
+  if (r.catalog?.upstream) foot.push(`upstream: ${r.catalog.upstream}`);
+  else if (r.virtual) foot.push('not cloned yet');
+  if (r.catalog) foot.push(`${r.catalog.alive ? 'ALIVE' : 'DORMANT'} · PUSH ${r.lastCommitAt?.slice(0, 10) ?? 'UNKNOWN'}`);
+  if (r.catalog?.cardStale) foot.push('STALE CARD');
+  if (r.catalog?.verificationStatus === 'unverified') foot.push('UNVERIFIED');
+  const footText = foot.join('  ·  ');
+  const footPx = fitText(ctx, footText, W - 150, 33, 18, SANS, 500);
+  ctx.font = `500 ${footPx}px ${SANS}`;
+  ctx.fillText(footText, W / 2, H - 165);
 
   if (hasGoldBand(r)) {
     ctx.fillStyle = '#d9b545';

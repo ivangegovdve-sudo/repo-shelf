@@ -300,7 +300,13 @@ export function Book({ repo, x, y, width, height, plankY }: Props) {
             <strong>{displayName(repo.name)}</strong>
             <span>
               {repo.virtual
-                ? `${repo.visibility ?? 'link'}${repo.github ? ` · ${repo.github.stars.toLocaleString()} stars` : ''}`
+                ? repo.catalog?.kind === 'reference-copy'
+                  ? `Reference copy · upstream ${repo.catalog.upstream} · ${repo.catalog.alive ? 'alive' : 'dormant'} · pushed ${relativeTime(repo.lastCommitAt)}`
+                  : repo.catalog?.kind === 'authored-fork'
+                    ? `Authored fork · ${repo.catalog.commitsAhead} commits ahead of ${repo.catalog.upstream} · ${repo.catalog.alive ? 'alive' : 'dormant'}`
+                    : repo.catalog?.kind === 'original'
+                      ? `Ivan's original · ${repo.catalog.alive ? 'alive' : 'dormant'} · pushed ${relativeTime(repo.lastCommitAt)}`
+                      : `${repo.visibility ?? 'link'}${repo.github ? ` · ${repo.github.stars.toLocaleString()} stars` : ''}`
                 : `${repo.commitCount} commits · ${relativeTime(repo.lastCommitAt)}${repo.dirtyCount ? ` · ${repo.dirtyCount} uncommitted` : ''}`}
             </span>
           </div>

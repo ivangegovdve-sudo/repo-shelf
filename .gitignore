@@ -10,5 +10,5 @@ playwright-report/
 Thumbs.db
 release/
 dist-static/
+dist-pages/
 shelf-exports/
-catalog-site/
