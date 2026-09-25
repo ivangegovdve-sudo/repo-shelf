@@ -127,6 +127,21 @@ test.describe('spine-out wall (published catalog)', () => {
     await expect(page.locator('.spine-tip .tip-upstream')).toHaveText('Forked from upstream-org/echo-adapted');
   });
 
+  test.describe('on a hoverless device with a keyboard', () => {
+    test.use({ hasTouch: true, isMobile: true });
+
+    test('keyboard focus still shows the upstream, while pointer tips stay hidden', async ({ page }) => {
+      expect(await page.evaluate(() => matchMedia('(hover: none)').matches)).toBe(true);
+      for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight');
+      await expect(page.locator('.spine-tip .tip-upstream')).toHaveText('Copy of upstream-org/echo-reference');
+      await expect(page.locator('.spine-tip')).toBeVisible();
+      const adapted = await spinePoint(page, 'echo-adapted');
+      await page.mouse.move(adapted.x, adapted.y);
+      await expect(page.locator('.spine-tip .tip-upstream')).toHaveText('Forked from upstream-org/echo-adapted');
+      await expect(page.locator('.spine-tip')).toBeHidden();
+    });
+  });
+
   test('the fold-out window leads with the attribution and links upstream', async ({ page }) => {
     const ref = await spinePoint(page, 'echo-reference');
     await page.mouse.click(ref.x, ref.y);

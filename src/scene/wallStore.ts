@@ -3,6 +3,8 @@ import type { WallLayout } from './wallLayout';
 
 export const ZOOM_MIN = 0.2;
 export const ZOOM_MAX = 3;
+/** Exports frame the whole wall, however long; this only guards against a degenerate layout. */
+const EXPORT_ZOOM_MIN = 0.01;
 /** Room shown beyond the end panels at zoom 1. */
 const EDGE = 0;
 
@@ -27,10 +29,15 @@ interface WallState {
   /** Scroll just enough to bring [x0, x1] (world) into the unobscured part of the canvas. */
   reveal: (x0: number, x1: number, y0?: number, y1?: number) => void;
   resetView: () => void;
+  /**
+   * Fit the whole wall in the canvas for an export (shelfie, rewind). Unlike setTarget it may go below
+   * ZOOM_MIN: a long wall is still framed whole. The next interactive move clamps back to the floor.
+   */
+  frameAll: (inset?: number) => void;
 }
 
-function clampTarget(t: WallTarget, layout: WallLayout | null, size: { width: number; height: number }): WallTarget {
-  const zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, t.zoom));
+function clampTarget(t: WallTarget, layout: WallLayout | null, size: { width: number; height: number }, minZoom = ZOOM_MIN): WallTarget {
+  const zoom = Math.min(ZOOM_MAX, Math.max(minZoom, t.zoom));
   if (!layout || size.width <= 0) return { ...t, zoom };
   const halfW = size.width / 2 / zoom;
   const halfH = size.height / 2 / zoom;
@@ -97,6 +104,12 @@ export const useWall = create<WallState>()((set, get) => ({
     const left = target.x - size.width / 2 / target.zoom;
     set({ target: clampTarget({ x: left + halfW, y: (layout?.height ?? size.height) / 2, zoom: 1 }, layout, size) });
   },
+  frameAll(inset = 32) {
+    const { layout, size } = get();
+    if (!layout || size.width <= 0 || size.height <= 0) return;
+    const zoom = Math.min(1, (size.width - inset) / layout.width, size.height / layout.height);
+    set({ target: clampTarget({ zoom, x: layout.width / 2, y: layout.height / 2 }, layout, size, EXPORT_ZOOM_MIN) });
+  },
 }));
 
 export interface ScreenRect {
@@ -113,8 +126,8 @@ export const wallView = {
   y0: 0,
   y1: 0,
   zoom: 1,
-  /** Canvas-relative rect of the spine the tooltip belongs to. */
-  tip: null as { id: string; rect: ScreenRect } | null,
+  /** Canvas-relative rect of the spine the tooltip belongs to; `keyboard` when it follows the focus rather than the pointer. */
+  tip: null as { id: string; rect: ScreenRect; keyboard: boolean } | null,
   /** Canvas-relative rect of the keyboard-focused spine. */
   ring: null as ScreenRect | null,
   /** Canvas-relative x of each bay's centre and of the bay's visible, unobscured span; null when off screen. */

@@ -82,4 +82,10 @@ What changed to get here:
 - [x] Fold-out window
 - [x] Full 1,256 build: FPS + cache measured across a full scroll
 - [x] e2e (14/14), README and AGENTS.md, other viewports, themes and bookcase builds
+- [x] First real CI run: fixed the `wall.ts`/`Wall.tsx` case-only clash (TS1149 on Windows/macOS, now `wallLayout.ts`) and the missing git identity in `pages.yml`. All green on `76556c9`.
+- [x] Codex review, round 1: an on-disk clone of a cataloged repo was dropped by the catalog merge (`mergeCatalog`), and the folder filters were hidden beside the catalog (`filterChips`).
+- [x] Codex review, round 2:
+  - Shelfie and rewind exports clamped to the 0.2 interactive zoom floor, so the 9,480 px public wall was cropped at 1440 px. `useWall.frameAll()` now fits the whole wall; a Shelfie at 1440×900 frames it at zoom 0.149.
+  - Keyboard-focus tooltips were hidden on `hover: none` devices; only pointer tips are hidden there now.
+  - 115/115 unit tests, 15/15 e2e.
 - [ ] Real-GPU frame rate: needs `await __measureWall()` on Ivan's machine

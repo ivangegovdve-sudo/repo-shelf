@@ -104,10 +104,7 @@ async function frameWholeCase(h: R3fHandle): Promise<() => Promise<void>> {
   const before = { target: { ...wall.target }, selected: st.selectedRepoId };
   st.setInstant(true);
   st.select(null);
-  if (wall.layout && wall.size.width > 0) {
-    const zoom = Math.min(1, (wall.size.width - 32) / wall.layout.width, wall.size.height / wall.layout.height);
-    wall.setTarget({ zoom, x: wall.layout.width / 2, y: wall.layout.height / 2 });
-  }
+  wall.frameAll();
   await settle(h, 3);
   return async () => {
     const s = useShelf.getState();

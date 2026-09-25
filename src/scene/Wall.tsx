@@ -461,7 +461,7 @@ export function Wall() {
     // The open book already has its window.
     if (tipId && tipId === st.selectedRepoId) tipId = null;
     const tipRect = rectFor(tipId);
-    wallView.tip = tipId && tipRect ? { id: tipId, rect: tipRect } : null;
+    wallView.tip = tipId && tipRect ? { id: tipId, rect: tipRect, keyboard: !st.hoveredRepoId } : null;
     wallView.ring = wallView.keyboard ? rectFor(st.focusedRepoId) : null;
 
     const plateWorldY = L.height - WALL.TOP / 2;

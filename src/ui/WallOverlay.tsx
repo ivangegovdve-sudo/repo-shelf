@@ -53,6 +53,8 @@ function placeTip(node: HTMLDivElement | null): void {
   const y = above ? tip.rect.top - h - 14 : tip.rect.top + tip.rect.height + 14;
   node.style.transform = `translate3d(${Math.round(x - w / 2)}px, ${Math.round(y)}px, 0)`;
   node.dataset.side = above ? 'above' : 'below';
+  // Hoverless devices hide pointer tips (a tap opens the book), but keyboard focus still gets one.
+  node.classList.toggle('by-key', tip.keyboard);
   node.style.setProperty('--arrow-x', `${Math.round(Math.min(w - 16, Math.max(16, cx - (x - w / 2))))}px`);
 }
 

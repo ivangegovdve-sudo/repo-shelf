@@ -550,7 +550,7 @@ code {
   display: none;
 }
 @media (hover: none) {
-  .spine-tip {
+  .spine-tip:not(.by-key) {
     display: none;
   }
 }
