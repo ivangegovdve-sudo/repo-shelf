@@ -2,13 +2,19 @@
 
 [![CI](https://github.com/ivangegovdve-sudo/repo-shelf/actions/workflows/ci.yml/badge.svg)](https://github.com/ivangegovdve-sudo/repo-shelf/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-Your git repos as books on a 3D bookshelf. Every root folder you configure is a shelf, every git repo inside it is a book. Hover to browse, click to open, zoom and orbit the case, drag a book to another shelf to move the repo on disk.
+Your git repos as books on a 3D bookshelf, spine-out, the way a real library looks. Every root folder you configure is a bay of the bookcase, and every git repo inside it is a book. Hundreds of spines fit in one window. Hover a spine to see what the repo is, click it to fold the book out into its own window, scroll along the wall, and drag a book into another bay to move the repo on disk.
 
 Built with React Three Fiber, Express, and `gh`. Runs on your machine only. Windows, macOS and Linux.
 
 This fork also opens with Ivan's public repoindex catalog already bound as books. Shelves are derived from each capability card's purpose, not language or stars. Originals, authored forks, and zero-ahead reference copies use different bindings; every fork names and links to its upstream source. Stale or unverified cards are labelled rather than presented as current facts.
 
-Catalog entries use the app's real 3D book system: varied volume proportions, clothbound purpose palettes, procedural cover art, hinged covers, and readable first pages. Originals appear as substantial first editions, changed forks as adapted editions, and untouched forks as thinner archival reference editions with the upstream printed directly on the cover and spine.
+The shelf is a wooden wall with one bay per purpose, separated by real divider boards. Every spine shows its edition without any hovering:
+
+- **Originals** are burgundy cloth with gilt lettering, gilt rules and a gilt ornament. They are the widest, tallest volumes.
+- **Adapted forks**, which carry commits of Ivan's own, are navy cloth with cream lettering, a copper head band and a fork mark.
+- **Reference copies**, forks with zero commits of Ivan's, are pale archival buckram with dark ink and a library call-number sticker. They are the slimmest volumes.
+
+Inside each bay, Ivan's own work comes first. Hovering (or keyboard-focusing) any fork names its upstream straight away; a reference copy's tooltip says it is a copy of that upstream and not Ivan's work. Clicking a spine folds the book out: the 3D book turns from spine to cover, the upstream is printed on the cover, and the cover opens to a readable first page.
 
 ![repo shelf](docs/media/screenshot-shelf.png)
 
@@ -16,18 +22,18 @@ Catalog entries use the app's real 3D book system: varied volume proportions, cl
 | --- | --- | --- |
 | ![door](docs/media/desktop-door.png) | ![door open](docs/media/desktop-door-open.png) | ![shelf window](docs/media/desktop-shelf.png) |
 
-| Open a book (page beside the shelf) | Zoomed out, every shelf | Midnight theme, modern case | Phone |
+| A spine folded out into its window | Zoomed out, the whole wall | Midnight theme | Phone |
 | --- | --- | --- | --- |
 | ![open](docs/media/screenshot-open.png) | ![zoom out](docs/media/screenshot-zoom-out.png) | ![midnight](docs/media/screenshot-midnight.png) | ![mobile](docs/media/screenshot-mobile-open.png) |
 
 ## Share it
 
-![orbit](docs/media/orbit.gif)
+![pan along the wall](docs/media/pan.gif)
 
 The **Share** menu in the header:
 
 - **Shelfie (PNG)**: the current view with a caption bar (your name, repo count, top languages). 1600px, ready to post.
-- **Orbit GIF**: the camera sweeps around your bookcase in a 3-second loop.
+- **Pan GIF**: the camera glides along the whole wall and back in a 3-second loop.
 - **Rewind GIF**: every book lands on the shelves in the order you created the repos, with a year counter. Or play it on screen without exporting.
 - **Publish my shelf…**: one click turns your public repos into a standalone 3D library site on GitHub Pages, at `https://<you>.github.io/<name>/`. Visitors can browse the shelves, open books, and read the READMEs. Private repos, local-only repos, hidden shelves and file paths never leave your machine; the page carries a "get yours" link back here. Re-publish any time, the link stays. There is also **Export folder only** if you want to host it elsewhere.
 
@@ -65,9 +71,10 @@ If Windows Defender blocks the build with `EPERM ... win-unpacked.tmp`, build to
 | Yellow dot at the bottom | git could not read the repo |
 | Dotted outline, "PUBLIC ↗" or "🔒 PRIVATE" | A GitHub or link book: not on disk yet; the lock marks a private repo |
 | "ARCHIVED" stamp | Archived on GitHub |
-| Gray binding, “UPSTREAM WORK · REFERENCE” | Fork with zero commits ahead; reference copy, not Ivan's work |
-| Amber binding, “FORK · n AHEAD” | Fork containing commits of Ivan's own; upstream remains named |
-| Green edge, “IVAN'S ORIGINAL” | Repository authored as an original project |
+| Burgundy cloth, gilt title, gilt rules and ornament | Catalog: Ivan's original repository |
+| Navy cloth, cream title, copper head band, fork mark | Catalog: a fork carrying commits of Ivan's own. Hover or open it to see the upstream |
+| Pale buckram, dark ink, call-number sticker at the foot | Catalog: a reference copy with zero commits of Ivan's. The upstream is named on hover and printed on the cover |
+| Thin red line down the spine's edge | Catalog: the capability card is stale or unverified |
 
 ## Actions
 
@@ -105,7 +112,7 @@ Then open http://127.0.0.1:4877.
 
 ## Opening a book
 
-Click a book and it slides out, turns, and its cover swings open on a hinge. Beside the shelf a two-page spread opens: the left page is the repo (facts, actions), the right page turns through **README** (rendered), **Commits**, **Issues**, **Pull requests**, **Files** and **Branches**. Local repos read from disk and git; GitHub books read from the API. Rows longer than the case are clipped at its sides and paged with the arrows.
+Click a spine and the book slides out of the wall and folds out into its own window over the right of the wall. The window shows the 3D book, which turns from spine to cover; click it to swing the cover open to the first page. Beside the book are the repo's edition, who wrote it (for forks, the upstream, with a link), its description, and its facts: language, last push, alive or dormant, and Ivan's commits. Local repos also get their actions and pages: **README** (rendered), **Commits**, **Issues**, **Pull requests**, **Files** and **Branches**, read from disk and git or from the GitHub API. Click any other spine while the window is open and it swaps to that book. Arrow keys walk the wall and Enter opens the focused spine.
 
 ## GitHub account shelves
 
@@ -193,13 +200,24 @@ The 3D bookshelf application was created by [BkashJEE](https://github.com/BkashJ
 | Key | Action |
 | --- | --- |
 | `/` | Focus search |
-| `Esc` | Clear search, close panel or dialog |
-| `↑` `↓` or mouse wheel | Move between shelves |
-| `ctrl` + wheel, trackpad pinch, `+` `-` | Zoom in / out (20% shows the whole case, 800% is nose-on-a-spine) |
-| Drag on the wood, or right-drag anywhere | Orbit the bookcase |
-| Double-click a book | Zoom right up to it |
-| `0` or double-click the wood | Reset the view |
-| `←` `→` | Previous / next repo while the panel is open |
+| Mouse wheel, trackpad swipe, or drag the wall | Move along the wall (drag and release to fling) |
+| `←` `→` | Previous / next spine along the wall |
+| `↑` `↓` | The spine on the row above / below, in the same bay |
+| `Page Up` `Page Down`, `Home` `End` | Previous / next category bay, first / last spine |
+| `Enter` or `Space` | Open the focused spine in its window (swaps the open window) |
+| `Esc` | Close the window, then clear the focus; in the search box, clear the search |
+| `ctrl` + wheel, trackpad pinch, `+` `-` | Zoom in / out around the pointer (20% shows the whole wall) |
+| Double-click a spine | Zoom right up to it |
+| `0` or double-click the wood | Back to 100 % |
+| Category strip along the bottom | Click or drag to travel to any bay |
+
+## Performance
+
+The wall draws every spine, all 1,256 in the full catalog, in 9 to 20 draw calls. Planks, dividers, back panels and baked shade are merged meshes. The spines are instanced meshes that share a texture atlas.
+
+A spine needs far less texture than a cover. Spines are lettered lazily, only when they first scroll into view. Each is 256 texels tall, and they are shelf-packed into 1024² atlas pages. The atlas is capped at 16 pages (85.3 MiB with mipmaps) and recycles the least recently seen page when full. Full covers and first pages exist only for the open book, in a 6-entry cache. The worst case for everything the wall can hold at once is 140 MiB, which `tests/texture-budget.test.ts` keeps below 160 MiB.
+
+To measure your own machine, open the browser console on the shelf and run `await __measureWall()`. It glides the whole wall and reports the frame rate, frame times and the texture cache. `__wallStats()` reports the cache alone.
 
 ## Tests
 
@@ -212,7 +230,7 @@ npm run test:e2e  # Playwright against fixture repos in a temp folder
 
 ```
 server/   Express API: config, scanner, GitHub enrichment, actions, SSE
-src/      React + R3F UI: scene/ (bookcase, books, camera), ui/ (panel, dialogs), store, derive
+src/      React + R3F UI: scene/ (spine-out wall, spine atlas, camera, book viewer textures), ui/ (book window, overlays, dialogs), store, derive
 tests/    vitest unit tests and Playwright e2e
 docs/     design spec and implementation plan
 ```

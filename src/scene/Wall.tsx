@@ -12,6 +12,7 @@ import { PULL, SpineField } from './spineField';
 import { SPINE_FONT } from './spineAtlas';
 import { useWall, wallView, type ScreenRect } from './wallStore';
 import { wallPoint } from './WallCamera';
+import './benchmark';
 
 const KEY_STEPS: Record<string, WallStep> = {
   ArrowLeft: 'left',
@@ -99,7 +100,8 @@ export function Wall() {
     useWall.getState().setTarget({ x: 0 });
   }, [query, filter, activeShelfId]);
 
-  const structure = useMemo(() => buildStructure(layout), [layout]);
+  const caseStyle = useShelf((s) => s.caseStyle);
+  const structure = useMemo(() => buildStructure(layout, caseStyle), [layout, caseStyle]);
   useEffect(
     () => () => {
       structure.frame.dispose();
@@ -119,6 +121,15 @@ export function Wall() {
     return t;
   }, []);
   const back = backPanelTexture(theme);
+  // The room the bookcase stands in, seen only when zoomed out: a wall behind it and a floor under it. Unlit, so the colours are exact.
+  const room = useMemo(() => {
+    const bg = new THREE.Color(theme.scene.background);
+    const wood = new THREE.Color(theme.scene.frame);
+    return {
+      wall: `#${bg.clone().lerp(wood, theme.dark ? 0.3 : 0.14).getHexString()}`,
+      floor: `#${wood.clone().lerp(bg, theme.dark ? 0.12 : 0.3).getHexString()}`,
+    };
+  }, [theme]);
   const trimColor = useMemo(() => `#${new THREE.Color(theme.scene.plank).lerp(new THREE.Color('#f3e2c4'), 0.28).getHexString()}`, [theme]);
 
   const field = useMemo(() => new SpineField(), []);
@@ -477,11 +488,24 @@ export function Wall() {
     <group>
       {/* Opaque wood draws after the spines in front of it, so hidden back panels fail the depth test early. */}
       <mesh geometry={structure.back} material={backMat} renderOrder={1} />
+      <mesh position={[layout.width / 2, layout.height / 2 + 2000, -WALL.DEPTH - 40]} renderOrder={2}>
+        <planeGeometry args={[layout.width + 24000, layout.height + 6000]} />
+        <meshBasicMaterial color={room.wall} />
+      </mesh>
+      <mesh position={[layout.width / 2, 0, -WALL.DEPTH + 20000]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={2}>
+        <planeGeometry args={[layout.width + 24000, 40000]} />
+        <meshBasicMaterial color={room.floor} />
+      </mesh>
+      <mesh position={[layout.width / 2, 0.5, 90]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={3}>
+        <planeGeometry args={[layout.width + 120, 220]} />
+        <meshBasicMaterial color="#000000" map={shadeTexture()} transparent opacity={0.4} depthWrite={false} />
+      </mesh>
       <mesh geometry={structure.frame} renderOrder={1}>
-        <meshLambertMaterial map={wood} color={theme.scene.frame} />
+        {/* Modern is painted: the frame colour without the grain. */}
+        <meshLambertMaterial key={caseStyle} map={caseStyle === 'modern' ? null : wood} color={theme.scene.frame} />
       </mesh>
       <mesh geometry={structure.planks} renderOrder={1}>
-        <meshLambertMaterial map={wood} color={theme.scene.plank} />
+        <meshLambertMaterial key={caseStyle} map={caseStyle === 'modern' ? null : wood} color={theme.scene.plank} />
       </mesh>
       <mesh geometry={structure.trim} renderOrder={1}>
         <meshBasicMaterial color={trimColor} />

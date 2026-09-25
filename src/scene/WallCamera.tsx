@@ -71,7 +71,8 @@ export function WallCamera() {
     const dist = cameraDistance(size.height, c.zoom);
     if (cam.fov !== WALL_FOV || Math.abs(cam.far - (dist + 1200)) > 1) {
       cam.fov = WALL_FOV;
-      cam.near = Math.max(1, dist - 1200);
+      // Near enough to show the floor in front of the bookcase when zoomed out; far only just past the wall.
+      cam.near = Math.max(10, dist * 0.1);
       cam.far = dist + 1200;
       cam.updateProjectionMatrix();
     }

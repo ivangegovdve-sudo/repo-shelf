@@ -36,6 +36,42 @@ All numbers below come from the full local build of all 1,256 books (`npm run bu
 - **Interactions checked in a browser (Playwright with Chromium, SwiftShader):** hover tooltip naming the upstream; click opens the window; clicking another spine swaps it; the cover opens to the first page; arrows move a gold focus ring with a live-region announcement; Enter opens and Esc closes.
 - **Tests:** 109/109, the original 90 plus 19 new (wall layout, density at three screen sizes, edition from spine, texture budget).
 
+## Checkpoint 3: measured on the full local-only build of all 1,256 books
+
+Command: `npm run build:library:local -- catalog.json <dir>`, with `catalog.json` from repoindex `codex/publish-static-catalog-20260925` (1,256 repos: 89 originals, 37 adapted forks, 1,130 reference copies). The page was served locally and driven with Playwright in Chromium at 1920×1080, DPR 1. The full scroll glides from the first bay to the last over 24 s. Two runs gave the same numbers.
+
+| Measure | Result |
+| --- | --- |
+| Whole spines on screen, 1920×1080 (canvas 1920×979) | 314 at the start, 283–342 along the wall |
+| Whole spines on screen, 1440×900 / 1366×768 | 172 / 163 |
+| Wall | 7,613 px wide, 13 bays, 4 rows |
+| Draw calls, whole wall | 9 at first view, 20 after every page is lettered |
+| Triangles | 37,064 |
+| Atlas after a full scroll | 1,256 of 1,256 spines lettered, 13 pages, **69.3 MiB** (cap 85.3), 0 evictions, 0 unlettered |
+| CPU spent lettering all 1,256 spines | 269–277 ms total, over about 50 page uploads |
+| Cover/page cache after opening 12 books | 6 entries (the cap), **26.7 MiB** |
+| All textures, after the scroll plus 12 books | **96.0 MiB** (budget 160; tested worst case 140.1) |
+| Frame rate during the full scroll | **1.3 fps**, see the note below |
+| `gl.render` CPU time per frame | p50 7.1–7.3 ms, p95 12.6–16.6 ms |
+
+**The frame rate is a software-rasterizer number, not a GPU number.** This cloud container has no GPU; Chromium renders WebGL through SwiftShader on the CPU. Under exactly the same conditions:
+- the old face-out build scores 1.0 fps, with a `gl.render` p50 of 19.8 ms;
+- the wall scores 1.3 fps, with a `gl.render` p50 of about 7.2 ms, so it costs less than half the old CPU time per frame;
+- at 960×540 the wall scores 2.3 fps, which shows the cost is fill rate, the thing a real GPU does in parallel.
+
+A real-GPU frame rate cannot be measured here. Run `await __measureWall()` in the console of the built shelf on a real machine to get it; the function uses the same method as this table.
+
+What changed to get here:
+- Lambert shading instead of PBR (1.3 fps vs 0.9 fps before it).
+- Opaque wood draws after the spines, so hidden back panels fail the depth test early.
+- DPR capped at 1.5, since the atlas carries about 1.5 texels per CSS px anyway.
+- Lettering in batches of at least 12 spines per page upload.
+
+## Also fixed along the way
+
+- e2e was broken on PR #1 itself: the fixture API merged the 1,192 catalog books into its three-repo fixture, so 6 of 8 specs failed. `playwright.config.ts` now points `SHELF_CATALOG` at a missing file for the fixture. 8/8 pass, plus 6 new wall specs.
+- The wall map only attached its pointer handlers if a layout existed on its first render; it now attaches whenever it appears.
+
 ## Checkpoint log
 
 - [x] Baseline repaired (catalog regenerated), 90/90
@@ -44,5 +80,6 @@ All numbers below come from the full local build of all 1,256 books (`npm run bu
 - [x] Wall rendering, camera, input
 - [x] Overlays, toolbar
 - [x] Fold-out window
-- [ ] Full 1,256 build: FPS + cache measured across a full scroll
-- [ ] e2e, docs, other viewports and themes
+- [x] Full 1,256 build: FPS + cache measured across a full scroll
+- [x] e2e (14/14), README and AGENTS.md, other viewports, themes and bookcase builds
+- [ ] Real-GPU frame rate: needs `await __measureWall()` on Ivan's machine

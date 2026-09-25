@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { WALL, rowBaseY, type WallLayout } from './wall';
+import type { CaseStyle } from '../store';
 
 /** Board with wood grain in world space, so a 1,500 px plank is not one stretched texture. */
 function board(x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, vertical = false): THREE.BufferGeometry {
@@ -46,7 +47,7 @@ export interface WallStructure {
  * under every row, cornice and plinth, a back panel per cubby, and baked
  * shade (under each plank, along each divider) instead of shadow maps.
  */
-export function buildStructure(layout: WallLayout): WallStructure {
+export function buildStructure(layout: WallLayout, style: CaseStyle = 'classic'): WallStructure {
   const { metrics: m, width: W, height: H } = layout;
   const back = -WALL.DEPTH - 12;
   const frame: THREE.BufferGeometry[] = [];
@@ -57,16 +58,24 @@ export function buildStructure(layout: WallLayout): WallStructure {
   const trim: THREE.BufferGeometry[] = [];
 
   const top = H - WALL.TOP;
-  // Carcass back: closes every gap a low or high viewpoint could see through.
-  frame.push(board(0, W, 0, H, back - 10, back - 1));
-  // End panels, cornice with a crown, plinth with a kick board.
-  frame.push(board(0, WALL.END, 0, H, back - 8, 18, true));
-  frame.push(board(W - WALL.END, W, 0, H, back - 8, 18, true));
-  frame.push(board(WALL.END, W - WALL.END, top, H - 10, back, 16));
-  frame.push(board(0, W, H - 10, H, back - 8, 26));
-  frame.push(board(WALL.END, W - WALL.END, top - 4, top + 6, 0, 22));
-  frame.push(board(WALL.END, W - WALL.END, 0, WALL.BOTTOM - WALL.PLANK, back, 16));
-  frame.push(board(0, W, 0, 12, back - 8, 24));
+  const carcass = style !== 'floating';
+  if (carcass) {
+    // Carcass back: closes every gap a low or high viewpoint could see through.
+    frame.push(board(0, W, 0, H, back - 10, back - 1));
+    // End panels, cornice and plinth.
+    frame.push(board(0, WALL.END, 0, H, back - 8, 18, true));
+    frame.push(board(W - WALL.END, W, 0, H, back - 8, 18, true));
+    frame.push(board(WALL.END, W - WALL.END, top, H - 10, back, 16));
+    frame.push(board(WALL.END, W - WALL.END, 0, WALL.BOTTOM - WALL.PLANK, back, 16));
+  }
+  if (style === 'classic') {
+    // Crown, moulding and kick board.
+    frame.push(board(0, W, H - 10, H, back - 8, 26));
+    frame.push(board(WALL.END, W - WALL.END, top - 4, top + 6, 0, 22));
+    frame.push(board(0, W, 0, 12, back - 8, 24));
+  } else if (style === 'modern') {
+    frame.push(board(0, W, H - 10, H, back - 8, 18));
+  }
 
   layout.bays.forEach((bay, b) => {
     const x0 = bay.x;
@@ -78,7 +87,7 @@ export function buildStructure(layout: WallLayout): WallStructure {
       const ceiling = r === 0 ? top - 4 : rowBaseY(m, r - 1) - WALL.PLANK;
       planks.push(board(x0, x1, base - WALL.PLANK, base, back, 10));
       trim.push(board(x0, x1, base - 1.4, base, 9.6, 10.4));
-      panels.push(quad(x0, x1, base, ceiling, back + 0.5, [0, 1, 1, 1, 0, 0, 1, 0]));
+      if (carcass) panels.push(quad(x0, x1, base, ceiling, back + 0.5, [0, 1, 1, 1, 0, 0, 1, 0]));
       // Shade cast by the plank (or cornice) above, falling over the upper part of the books.
       shade.push(quad(x0, x1, ceiling - 70, ceiling, 1.2, [0, 1, 1, 1, 0, 0, 1, 0]));
       // Shade along both dividers.
@@ -99,9 +108,9 @@ export function buildStructure(layout: WallLayout): WallStructure {
   if (!layout.bays.length) planks.push(board(WALL.END, W - WALL.END, WALL.BOTTOM - WALL.PLANK, WALL.BOTTOM, back, 10));
 
   return {
-    frame: mergeGeometries(frame)!,
+    frame: mergeGeometries(frame.length ? frame : [board(0, 1, 0, 1, -999, -998)])!,
     planks: mergeGeometries(planks)!,
-    back: mergeGeometries(panels.length ? panels : [quad(0, W, 0, H, back, [0, 1, 1, 1, 0, 0, 1, 0])])!,
+    back: mergeGeometries(panels.length ? panels : [quad(0, 1, 0, 1, -999, [0, 0, 0, 0, 0, 0, 0, 0])])!,
     shade: mergeGeometries(shade.length ? shade : [quad(0, 1, 0, 1, -999, [0, 0, 0, 0, 0, 0, 0, 0])])!,
     trim: mergeGeometries(trim.length ? trim : [board(0, 1, 0, 1, -999, -998)])!,
     metal: metal.length ? mergeGeometries(metal) : null,

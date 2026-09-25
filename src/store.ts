@@ -23,9 +23,9 @@ export interface Toast {
 
 export type CaseStyle = 'classic' | 'modern' | 'floating';
 export const CASE_STYLES: { id: CaseStyle; name: string; description: string }[] = [
-  { id: 'classic', name: 'Classic', description: 'Solid case with sides, back panel and crown' },
-  { id: 'modern', name: 'Modern', description: 'Thin planks, slim frame, open back' },
-  { id: 'floating', name: 'Floating', description: 'Planks only, nothing else in the way' },
+  { id: 'classic', name: 'Classic', description: 'Walnut case with crown, plinth and panelled back' },
+  { id: 'modern', name: 'Modern', description: 'Painted case, flat back, no crown' },
+  { id: 'floating', name: 'Floating', description: 'Planks and dividers on the wall, no carcass' },
 ];
 
 export interface DragState {
