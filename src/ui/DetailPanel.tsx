@@ -146,12 +146,13 @@ export function DetailPanel() {
       </header>
 
       <div className="bw-scroll">
-        <section className={`bw-hero ${coverOpen ? 'cover-open' : ''}`} key={repo.id}>
+        {/* The viewer stays mounted (one WebGL context) and turns the new book in; only the text is re-keyed to fade in. */}
+        <section className={`bw-hero ${coverOpen ? 'cover-open' : ''}`}>
           <div className="bw-book">
             <BookViewer repo={repo} staleDays={staleDays} open={coverOpen} onToggle={() => setCoverOpen((o) => !o)} />
             <span className="bw-book-hint">{coverOpen ? 'Click to close the cover' : 'Click the book to open it'}</span>
           </div>
-          <div className="bw-id">
+          <div className="bw-id" key={repo.id}>
             {edition !== 'plain' && (
               <div className={`bw-edition ed-${edition}`}>
                 <i className={`ed-swatch ed-${edition}`} aria-hidden="true" />

@@ -4,6 +4,9 @@ import { useWall, wallView } from '../scene/wallStore';
 /** The whole wall in one strip: every bay, how much of it is Ivan's work, and where the view is. Click or drag to travel. */
 export function WallMap() {
   const layout = useWall((s) => s.layout);
+  const size = useWall((s) => s.size);
+  // Nothing to travel to when the whole wall is already on screen.
+  const shown = Boolean(layout && layout.bays.length >= 2 && layout.width > size.width);
   const strip = useRef<HTMLDivElement>(null);
   const windowEl = useRef<HTMLDivElement>(null);
 
@@ -56,9 +59,9 @@ export function WallMap() {
       el.removeEventListener('pointerup', up);
       el.removeEventListener('pointercancel', up);
     };
-  }, []);
+  }, [shown]);
 
-  if (!layout || layout.bays.length < 2) return null;
+  if (!shown || !layout) return null;
   const W = layout.width;
   return (
     <nav className="wallmap" aria-label="Categories along the wall">

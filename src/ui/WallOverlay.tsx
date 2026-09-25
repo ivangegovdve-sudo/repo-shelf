@@ -130,15 +130,24 @@ function Plates() {
   useEffect(
     () =>
       wallView.subscribe(() => {
-        wallView.plates.forEach((x, i) => {
+        const scale = Math.min(1, Math.max(0.72, wallView.zoom));
+        wallView.plates.forEach((span, i) => {
           const node = refs.current[i];
           if (!node) return;
-          if (x === null) {
+          if (span === null) {
             node.style.visibility = 'hidden';
             return;
           }
+          // Full width is measured once; a tight bay drops the count, then ellipsises the name.
+          const full = Number(node.dataset.full || 0) || node.offsetWidth;
+          node.dataset.full = String(full);
+          const room = (span.right - span.left - 12) / scale;
+          node.classList.toggle('tight', room < full);
+          node.style.maxWidth = `${Math.max(40, Math.floor(room))}px`;
+          const w = Math.min(full, Math.max(40, room)) * scale;
+          const x = Math.min(span.right - 6 - w / 2, Math.max(span.left + 6 + w / 2, span.centre));
           node.style.visibility = 'visible';
-          node.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(wallView.plateY)}px, 0) translate(-50%, -50%) scale(${Math.min(1, Math.max(0.72, wallView.zoom))})`;
+          node.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(wallView.plateY)}px, 0) translate(-50%, -50%) scale(${scale})`;
         });
       }),
     [],

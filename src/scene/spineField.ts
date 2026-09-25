@@ -22,8 +22,9 @@ function recess(id: string): number {
   return ((h >>> 0) % 5) * 0.9;
 }
 
-function atlasMaterial(texture: THREE.Texture): THREE.MeshStandardMaterial {
-  const material = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.8, metalness: 0 });
+function atlasMaterial(texture: THREE.Texture): THREE.MeshLambertMaterial {
+  // Lambert, not PBR: cloth needs no specular, and 1,256 spines cover most of the screen.
+  const material = new THREE.MeshLambertMaterial({ map: texture });
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uTexel = { value: 1 / SPINE_ATLAS.page };
     shader.vertexShader = shader.vertexShader
@@ -64,7 +65,7 @@ export class SpineField {
   layout: WallLayout | null = null;
   staleDays = 90;
   private fallback: THREE.InstancedMesh | null = null;
-  private fallbackMat = new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0 });
+  private fallbackMat = new THREE.MeshLambertMaterial();
   private pages: PageMesh[] = [];
   private indexOf = new Map<string, number>();
   private pulls = new Map<string, { cur: number; target: number }>();
@@ -268,19 +269,10 @@ export class SpineField {
     }
   }
 
-  /** Spines inside [x0, x1] still shown as plain cloth, and how many of those the atlas thinks it has lettered. */
-  unlettered(x0: number, x1: number): { count: number; withEntry: number; sample: string[] } {
-    const out = { count: 0, withEntry: 0, sample: [] as string[] };
-    if (!this.layout) return out;
-    for (const s of this.layout.spines) {
-      if (s.x + s.w < x0 || s.x > x1) continue;
-      if (this.entryFor(s.index)) continue;
-      out.count++;
-      const e = this.atlas.get(s.repo.id);
-      if (e) out.withEntry++;
-      if (out.sample.length < 5) out.sample.push(`${s.repo.name}@${Math.round(s.x)} key=${this.atlas.keyFor(s.repo, s.w, s.h, this.staleDays).slice(0, 40)} entry=${e?.key.slice(0, 40)}`);
-    }
-    return out;
+  /** Spines inside [x0, x1] still shown as plain cloth (not lettered yet). */
+  unlettered(x0: number, x1: number): number {
+    if (!this.layout) return 0;
+    return this.layout.spines.filter((s) => s.x + s.w >= x0 && s.x <= x1 && !this.entryFor(s.index)).length;
   }
 
   pullOf(id: string): number {

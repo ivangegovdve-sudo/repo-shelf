@@ -36,6 +36,8 @@ export interface WallStructure {
   planks: THREE.BufferGeometry;
   back: THREE.BufferGeometry;
   shade: THREE.BufferGeometry;
+  /** Catch-light along each plank's front edge, so shelves read even in charcoal themes. */
+  trim: THREE.BufferGeometry;
   metal: THREE.BufferGeometry | null;
 }
 
@@ -52,6 +54,7 @@ export function buildStructure(layout: WallLayout): WallStructure {
   const panels: THREE.BufferGeometry[] = [];
   const shade: THREE.BufferGeometry[] = [];
   const metal: THREE.BufferGeometry[] = [];
+  const trim: THREE.BufferGeometry[] = [];
 
   const top = H - WALL.TOP;
   // Carcass back: closes every gap a low or high viewpoint could see through.
@@ -74,6 +77,7 @@ export function buildStructure(layout: WallLayout): WallStructure {
       const base = rowBaseY(m, r);
       const ceiling = r === 0 ? top - 4 : rowBaseY(m, r - 1) - WALL.PLANK;
       planks.push(board(x0, x1, base - WALL.PLANK, base, back, 10));
+      trim.push(board(x0, x1, base - 1.4, base, 9.6, 10.4));
       panels.push(quad(x0, x1, base, ceiling, back + 0.5, [0, 1, 1, 1, 0, 0, 1, 0]));
       // Shade cast by the plank (or cornice) above, falling over the upper part of the books.
       shade.push(quad(x0, x1, ceiling - 70, ceiling, 1.2, [0, 1, 1, 1, 0, 0, 1, 0]));
@@ -99,6 +103,7 @@ export function buildStructure(layout: WallLayout): WallStructure {
     planks: mergeGeometries(planks)!,
     back: mergeGeometries(panels.length ? panels : [quad(0, W, 0, H, back, [0, 1, 1, 1, 0, 0, 1, 0])])!,
     shade: mergeGeometries(shade.length ? shade : [quad(0, 1, 0, 1, -999, [0, 0, 0, 0, 0, 0, 0, 0])])!,
+    trim: mergeGeometries(trim.length ? trim : [board(0, 1, 0, 1, -999, -998)])!,
     metal: metal.length ? mergeGeometries(metal) : null,
   };
 }

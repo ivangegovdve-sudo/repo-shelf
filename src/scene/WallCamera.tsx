@@ -26,6 +26,8 @@ export function wallPoint(camera: THREE.Camera, el: HTMLElement, clientX: number
   return ray.ray.intersectPlane(plane, hit);
 }
 
+const reducedMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
 export function WallCamera() {
   const { camera, gl, invalidate, size } = useThree();
   const cur = useRef<{ x: number; y: number; zoom: number } | null>(null);
@@ -57,7 +59,7 @@ export function WallCamera() {
     const cam = camera as THREE.PerspectiveCamera;
     const c = (cur.current ??= { ...target });
     const instant = useShelf.getState().instant;
-    const k = instant || wallView.snap ? 1 : 1 - Math.exp(-delta * 11);
+    const k = instant || wallView.snap || reducedMotion ? 1 : 1 - Math.exp(-delta * 11);
     wallView.snap = false;
     c.x += (target.x - c.x) * k;
     c.y += (target.y - c.y) * k;

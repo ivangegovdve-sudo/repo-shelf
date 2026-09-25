@@ -263,7 +263,7 @@ code {
 .hint {
   color: color-mix(in srgb, var(--muted) 80%, transparent);
 }
-@media (max-width: 1280px) {
+@media (max-width: 1540px) {
   .chips-meta .hint {
     display: none;
   }
@@ -386,6 +386,18 @@ code {
   box-shadow: inset 0 1px 0 rgba(255, 250, 230, 0.8), inset 0 -1px 0 rgba(90, 60, 20, 0.45), 0 1px 3px rgba(0, 0, 0, 0.65);
   text-shadow: 0 1px 0 rgba(255, 245, 215, 0.55);
   transition: filter 0.2s;
+}
+.plate {
+  overflow: hidden;
+}
+.plate-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.plate.tight .plate-count,
+.plate.tight .plate-eds {
+  display: none;
 }
 .plate-count {
   font-weight: 500;
@@ -615,9 +627,14 @@ code {
 }
 @media (max-width: 640px) {
   .wallmap {
-    left: 12px;
-    right: 12px;
-    bottom: 58px;
+    display: none;
+  }
+  .hdr-title {
+    display: none;
+  }
+  .hdr-nav .btn.small {
+    white-space: nowrap;
+    padding: 5px 10px;
   }
 }
 
@@ -1855,7 +1872,6 @@ a.status {
   grid-template-columns: 200px 1fr;
   gap: 20px;
   align-items: start;
-  animation: hero-in 0.3s ease-out;
 }
 @keyframes hero-in {
   from {
@@ -1908,6 +1924,7 @@ a.status {
   flex-direction: column;
   gap: 6px;
   min-width: 0;
+  animation: hero-in 0.3s ease-out;
 }
 .bw-edition {
   display: inline-flex;

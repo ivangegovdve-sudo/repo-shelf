@@ -45,6 +45,7 @@ function firstVisible(layout: WallLayout): number {
 }
 
 const tmp = new THREE.Vector3();
+const reducedMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 export function Wall() {
   const { camera, gl, invalidate, size } = useThree();
@@ -105,6 +106,7 @@ export function Wall() {
       structure.planks.dispose();
       structure.back.dispose();
       structure.shade.dispose();
+      structure.trim.dispose();
       structure.metal?.dispose();
     },
     [structure],
@@ -117,6 +119,7 @@ export function Wall() {
     return t;
   }, []);
   const back = backPanelTexture(theme);
+  const trimColor = useMemo(() => `#${new THREE.Color(theme.scene.plank).lerp(new THREE.Color('#f3e2c4'), 0.28).getHexString()}`, [theme]);
 
   const field = useMemo(() => new SpineField(), []);
   useEffect(() => () => field.dispose(), [field]);
@@ -421,7 +424,7 @@ export function Wall() {
     const margin = 260 / Math.max(0.3, wallView.zoom);
     const res = field.update(wallView.x0 - margin, wallView.x1 + margin, frameNo.current, st.instant ? 1e9 : 12, fontsReady.current && wallView.zoom > 0.3);
     if (res.pending > 0) invalidate();
-    if (field.animate(delta, st.instant)) invalidate();
+    if (field.animate(delta, st.instant || reducedMotion)) invalidate();
 
     // Overlay anchors in canvas CSS px.
     const project = (x: number, y: number, z: number) => {
@@ -452,31 +455,36 @@ export function Wall() {
 
     const plateWorldY = L.height - WALL.TOP / 2;
     wallView.plateY = project(wallView.x0, plateWorldY, 22)[1];
-    const half = 118 / wallView.zoom;
     // Plates stay in the part of the wall the book window does not cover.
     const visibleRight = wallView.x1 - useWall.getState().occludeRight / wallView.zoom;
     wallView.plates = L.bays.map((bay) => {
       const a = Math.max(bay.x, wallView.x0);
       const b = Math.min(bay.x + bay.width, visibleRight);
       if (b - a < 60 / wallView.zoom) return null;
-      const centre = bay.x + bay.width / 2;
-      const x = b - a > half * 2 ? Math.min(b - half, Math.max(a + half, centre)) : (a + b) / 2;
-      return project(x, plateWorldY, 22)[0];
+      return {
+        centre: project(bay.x + bay.width / 2, plateWorldY, 22)[0],
+        left: project(a, plateWorldY, 22)[0],
+        right: project(b, plateWorldY, 22)[0],
+      };
     });
     wallView.emit();
   });
 
-  const backMat = useMemo(() => new THREE.MeshStandardMaterial({ map: back, roughness: 0.95 }), [back]);
+  const backMat = useMemo(() => new THREE.MeshLambertMaterial({ map: back }), [back]);
   useEffect(() => () => backMat.dispose(), [backMat]);
 
   return (
     <group>
-      <mesh geometry={structure.back} material={backMat} />
-      <mesh geometry={structure.frame}>
-        <meshStandardMaterial map={wood} color={theme.scene.frame} roughness={0.7} />
+      {/* Opaque wood draws after the spines in front of it, so hidden back panels fail the depth test early. */}
+      <mesh geometry={structure.back} material={backMat} renderOrder={1} />
+      <mesh geometry={structure.frame} renderOrder={1}>
+        <meshLambertMaterial map={wood} color={theme.scene.frame} />
       </mesh>
-      <mesh geometry={structure.planks}>
-        <meshStandardMaterial map={wood} color={theme.scene.plank} roughness={0.68} />
+      <mesh geometry={structure.planks} renderOrder={1}>
+        <meshLambertMaterial map={wood} color={theme.scene.plank} />
+      </mesh>
+      <mesh geometry={structure.trim} renderOrder={1}>
+        <meshBasicMaterial color={trimColor} />
       </mesh>
       {structure.metal && (
         <mesh geometry={structure.metal}>

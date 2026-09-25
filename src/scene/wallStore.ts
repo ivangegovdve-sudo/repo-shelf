@@ -117,8 +117,8 @@ export const wallView = {
   tip: null as { id: string; rect: ScreenRect } | null,
   /** Canvas-relative rect of the keyboard-focused spine. */
   ring: null as ScreenRect | null,
-  /** Canvas-relative centre x of each bay's name plate (sticky within the bay), null when off screen. */
-  plates: [] as (number | null)[],
+  /** Canvas-relative x of each bay's centre and of the bay's visible, unobscured span; null when off screen. */
+  plates: [] as ({ centre: number; left: number; right: number } | null)[],
   plateY: 0,
   /** True after arrow-key navigation, false again on pointer movement. */
   keyboard: false,

@@ -31,7 +31,7 @@ export function Scene() {
   return (
     <Canvas
       frameloop="demand"
-      dpr={[1, 2]}
+      dpr={[1, 1.5]}
       camera={{ fov: WALL_FOV, near: 10, far: 20000, position: [0, 0, 3000] }}
       gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
       style={{ touchAction: 'none' }}
