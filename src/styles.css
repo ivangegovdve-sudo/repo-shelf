@@ -1299,8 +1299,12 @@ code {
   padding: 8px;
   color: var(--ink);
 }
-.theme-opt:hover {
+.theme-opt:hover:not(:disabled) {
   background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+.theme-opt:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 .theme-opt.on {
   border-color: var(--accent);

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useShelf } from '../store';
+import { rewindSpan } from '../derive';
 import { api } from '../api';
 import { isStaticSite } from '../static';
 import { bytesToDataUrl, downloadDataUrl, panGif, rewindGif, shelfiePng } from '../share/capture';
@@ -15,6 +16,9 @@ export function ShareMenu() {
   const startRewind = useShelf((s) => s.startRewind);
   const githubLogin = useShelf((s) => s.githubLogin);
   const readOnly = isStaticSite();
+  // Rewind replays creation dates; catalog books have none, so a catalog-only shelf has nothing to replay.
+  const canRewind = useShelf((s) => rewindSpan(s.repos) !== null);
+  const noDates = 'Needs creation dates: catalog books have none. Add a folder shelf and rescan.';
 
   useEffect(() => {
     if (!open) return;
@@ -86,18 +90,20 @@ export function ShareMenu() {
           <button
             className="theme-opt"
             role="menuitem"
+            disabled={!canRewind}
             onClick={() =>
               run('Rewind GIF', async (p) => ({ dataUrl: await bytesToDataUrl(await rewindGif({ onProgress: p }), 'image/gif'), name: `${who}repo-shelf-rewind-${stamp()}.gif` }))
             }
           >
             <span className="theme-text">
               <b>Rewind GIF</b>
-              <small>Books land in the order you created them, year by year.</small>
+              <small>{canRewind ? 'Books land in the order you created them, year by year.' : noDates}</small>
             </span>
           </button>
           <button
             className="theme-opt"
             role="menuitem"
+            disabled={!canRewind}
             onClick={() => {
               setOpen(false);
               startRewind();
@@ -105,7 +111,7 @@ export function ShareMenu() {
           >
             <span className="theme-text">
               <b>Play rewind here</b>
-              <small>Watch it on screen without exporting.</small>
+              <small>{canRewind ? 'Watch it on screen without exporting.' : noDates}</small>
             </span>
           </button>
           {!readOnly && (

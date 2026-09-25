@@ -106,6 +106,20 @@ describe('buildStaticSite', () => {
     expect(fs.existsSync(path.join(out, '.nojekyll'))).toBe(true);
   });
 
+  it('does not fetch pages for catalog books, which carry their capability card instead', async () => {
+    const book = repo({ id: 'cat', shelfId: 's3', virtual: true, path: '', visibility: 'public', repoSlug: 'me/cat', linkUrl: 'https://github.com/me/cat',
+      catalog: { kind: 'reference-copy', upstream: 'up/cat', commitsAhead: 0, repoUrl: 'https://github.com/me/cat', cardStale: false, verificationStatus: 'verified', confidence: 'high', cardGeneratedAt: '', alive: true } });
+    const asked: string[] = [];
+    const r = await buildStaticSite({ ...state, repos: [...state.repos, book] }, {
+      staticDist: fakeDist(),
+      outDir: path.join(tmp, 'site'),
+      owner: 'me',
+      pagesFor: async (x) => (asked.push(x.id), { readme: null, files: [], commits: [], branches: [], issues: [], pulls: [], source: 'github', fetchedAt: '' }),
+    });
+    expect(r.repos).toBe(3);
+    expect(asked.sort()).toEqual(['link', 'pub']);
+  });
+
   it('refuses when nothing is public or the static build is missing', async () => {
     await expect(buildStaticSite({ ...state, repos: [repo({ id: 'p', visibility: 'private' })] }, { staticDist: fakeDist(), outDir: path.join(tmp, 'o'), owner: 'me' })).rejects.toMatchObject({ code: 'nothing_public' });
     await expect(buildStaticSite(state, { staticDist: path.join(tmp, 'nope'), outDir: path.join(tmp, 'o2'), owner: 'me' })).rejects.toBeInstanceOf(ActionError);

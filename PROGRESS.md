@@ -88,4 +88,10 @@ What changed to get here:
   - Shelfie and rewind exports clamped to the 0.2 interactive zoom floor, so the 9,480 px public wall was cropped at 1440 px. `useWall.frameAll()` now fits the whole wall; a Shelfie at 1440×900 frames it at zoom 0.149.
   - Keyboard-focus tooltips were hidden on `hover: none` devices; only pointer tips are hidden there now.
   - 115/115 unit tests, 15/15 e2e.
+- [x] Codex review, round 3:
+  - A shelf-only rescan (after a GitHub visibility, archive or delete action) re-added GitHub duplicates of catalog books. The server now keeps the local shelves separately and merges the catalog on every scan.
+  - Folding a GitHub-shelf duplicate into its catalog book now carries the live visibility, archive state, creation date and metadata, and the book keeps the owner-checked GitHub actions.
+  - Publishing with pages no longer makes about six `gh api` calls for each of the 1,192 catalog books.
+  - Rewind replays only dated books and leaves undated catalog books on the shelf; it is disabled when nothing is dated.
+  - 122/122 unit tests, 15/15 e2e.
 - [ ] Real-GPU frame rate: needs `await __measureWall()` on Ivan's machine

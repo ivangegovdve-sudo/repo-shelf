@@ -106,7 +106,9 @@ export function DetailPanel() {
   // A published catalog carries no README pages; do not open an empty chapter book there.
   const showPages = !c || !readOnly || hasPages;
 
-  const ownsIt = Boolean(!c && repo.owner && githubLogin && repo.owner.toLowerCase() === githubLogin.toLowerCase());
+  // A catalog book is a snapshot, except when the repo is also on one of your GitHub shelves: then it carries live state and can be managed.
+  const manageable = !c || Boolean(c.githubShelfId);
+  const ownsIt = Boolean(manageable && repo.owner && githubLogin && repo.owner.toLowerCase() === githubLogin.toLowerCase());
   const archive = (archived: boolean) => {
     void useShelf
       .getState()
@@ -184,8 +186,8 @@ export function DetailPanel() {
           {c?.cardStale && <span className="tag tag-red">Stale card</span>}
           {c?.verificationStatus === 'unverified' && <span className="tag tag-red">Unverified card</span>}
           {!c && repo.virtual && <span className="tag tag-muted">{repo.doc ? 'Guide' : repo.repoSlug ? 'On GitHub' : 'Link'}</span>}
-          {!c && repo.visibility === 'private' && <span className="tag tag-muted">🔒 Private</span>}
-          {!c && repo.visibility === 'public' && <span className="tag tag-muted">Public</span>}
+          {manageable && repo.visibility === 'private' && <span className="tag tag-muted">🔒 Private</span>}
+          {manageable && repo.visibility === 'public' && <span className="tag tag-muted">Public</span>}
           {repo.archived && <span className="tag tag-muted">Archived</span>}
           {!c && repo.github?.isFork && <span className="tag tag-muted">Fork</span>}
           {repo.dirtyCount > 0 && <span className="tag tag-red">{repo.dirtyCount} uncommitted</span>}
@@ -371,7 +373,7 @@ export function DetailPanel() {
           </button>
         )}
 
-        {!readOnly && !c && repo.virtual && repo.repoSlug && (
+        {!readOnly && manageable && repo.virtual && repo.repoSlug && (
           <div className="gh-manage">
             <div className="lbl">Manage on GitHub</div>
             {ownsIt ? (

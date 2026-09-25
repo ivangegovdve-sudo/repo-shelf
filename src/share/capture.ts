@@ -1,6 +1,6 @@
 import { GIFEncoder, quantize, applyPalette } from 'gifenc';
 import { useShelf } from '../store';
-import { languageCounts } from '../derive';
+import { createdBy, languageCounts, rewindSpan } from '../derive';
 import { themeById } from '../themes';
 import { useWall } from '../scene/wallStore';
 
@@ -191,9 +191,9 @@ export async function rewindGif(opts: GifOptions = {}): Promise<Uint8Array> {
   const delay = opts.delayMs ?? 90;
   const h = handle();
   const st = useShelf.getState();
-  const dates = st.repos.map((r) => (r.createdAt ? new Date(r.createdAt).getTime() : NaN)).filter((t) => Number.isFinite(t));
-  if (!dates.length) throw new Error('No creation dates yet. Rescan once so git can report first commits.');
-  const start = Math.min(...dates) - 24 * 3600 * 1000;
+  const span = rewindSpan(st.repos);
+  if (!span) throw new Error('No creation dates yet. Rescan once so git can report first commits.');
+  const start = span.start;
   const end = Date.now();
   const caption = shelfCaption();
   const frames: HTMLCanvasElement[] = [];
@@ -205,7 +205,7 @@ export async function rewindGif(opts: GifOptions = {}): Promise<Uint8Array> {
       const cursor = start + (end - start) * eased;
       useShelf.getState().setTimeline(cursor);
       await settle(h, 2);
-      const count = st.repos.filter((r) => r.createdAt && new Date(r.createdAt).getTime() <= cursor).length;
+      const count = createdBy(st.repos, cursor);
       const when = new Date(cursor);
       frames.push(composeFrame(width, caption, `${when.toLocaleString('en', { month: 'short' })} ${when.getFullYear()} · ${count} repos`));
       opts.onProgress?.(i + 1, n * 2);

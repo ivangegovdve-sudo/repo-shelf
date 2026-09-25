@@ -71,11 +71,17 @@ export async function createApp(deps: AppDeps): Promise<AppHandle> {
   let config: ShelfConfig = loadConfig(deps.configFile, deps.home);
   let shelves: Shelf[] = [];
   let repos: Repo[] = [];
+  /** What the configured shelves hold before the catalog is merged in; every scan, full or per shelf, updates this. */
+  let local: { shelves: Shelf[]; repos: Repo[] } = { shelves: [], repos: [] };
   const hub = new EventHub();
   const pagesCache = new PagesCache();
 
-  function withCatalog(localShelves: Shelf[], localRepos: Repo[]): { shelves: Shelf[]; repos: Repo[] } {
-    return mergeCatalog(deps.catalogFile ? loadCatalogFile(deps.catalogFile) : null, localShelves, localRepos);
+  /** Rebuild the served state from the local shelves and the catalog, in config order. */
+  function publishState(): void {
+    const merged = mergeCatalog(deps.catalogFile ? loadCatalogFile(deps.catalogFile) : null, local.shelves, local.repos);
+    const order = new Map([...merged.shelves.filter((s) => s.kind === 'catalog').map((s, i) => [s.id, i] as const), ...config.shelves.map((s, i) => [entryId(s), i + 100] as const)]);
+    shelves = [...merged.shelves].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+    repos = merged.repos;
   }
 
   const state = (): AppState => ({
@@ -92,30 +98,49 @@ export async function createApp(deps: AppDeps): Promise<AppHandle> {
   function enrichInBackground(targets: Repo[]): void {
     if (!enricher.available()) return;
     void enricher.enrichAll(targets, (updated) => {
-      const i = repos.findIndex((r) => r.id === updated.id);
-      if (i >= 0) {
-        repos[i] = {
-          ...repos[i],
+      const li = local.repos.findIndex((r) => r.id === updated.id);
+      if (li >= 0) {
+        local.repos[li] = {
+          ...local.repos[li],
           github: updated.github,
-          visibility: updated.github ? (updated.github.isPrivate ? 'private' : 'public') : repos[i].visibility,
+          visibility: updated.github ? (updated.github.isPrivate ? 'private' : 'public') : local.repos[li].visibility,
         };
-        hub.broadcast('repo:update', repos[i]);
+      }
+      if (li < 0) return;
+      const own = local.repos[li];
+      const i = repos.findIndex((r) => r.id === own.id);
+      if (i >= 0) {
+        repos[i] = own;
+        hub.broadcast('repo:update', own);
+        return;
+      }
+      // A GitHub book folded into its catalog book: refresh the catalog book's live state instead.
+      const slug = own.repoSlug?.toLowerCase();
+      const j = slug ? repos.findIndex((r) => r.catalog?.githubShelfId === own.shelfId && r.repoSlug?.toLowerCase() === slug) : -1;
+      if (j >= 0) {
+        repos[j] = { ...repos[j], github: own.github ?? repos[j].github, visibility: own.visibility };
+        hub.broadcast('repo:update', repos[j]);
       }
     });
   }
 
   async function rescan(onlyShelf?: string): Promise<void> {
     pagesCache.clear();
+    // GitHub metadata already fetched for a local repo is reused. Catalog books are not consulted:
+    // their metadata is a snapshot, and a local clone should get its own.
+    const keepGithub = new Map(local.repos.filter((r) => r.github).map((r) => [r.repoSlug, r.github]));
     if (onlyShelf) {
       const entry = entryById(onlyShelf);
       if (!entry) return;
       const { shelf, repos: fresh } = await scanShelf(entry, runner, enricher.listRepos);
-      shelves = shelves.map((s) => (s.id === shelf.id ? shelf : s));
-      const keepGithub = new Map(repos.filter((r) => r.github).map((r) => [r.repoSlug, r.github]));
-      repos = [
-        ...repos.filter((r) => r.shelfId !== shelf.id),
-        ...fresh.map((r) => ({ ...r, github: (r.repoSlug && keepGithub.get(r.repoSlug)) || null })),
-      ];
+      local = {
+        shelves: local.shelves.some((s) => s.id === shelf.id) ? local.shelves.map((s) => (s.id === shelf.id ? shelf : s)) : [...local.shelves, shelf],
+        repos: [
+          ...local.repos.filter((r) => r.shelfId !== shelf.id),
+          ...fresh.map((r) => ({ ...r, github: (r.repoSlug && keepGithub.get(r.repoSlug)) || null })),
+        ],
+      };
+      publishState();
       enrichInBackground(fresh.filter((r) => r.repoSlug && !keepGithub.has(r.repoSlug)));
     } else {
       // A full rescan re-reads shelf.config.json so edits made by hand show up without a restart.
@@ -125,16 +150,10 @@ export async function createApp(deps: AppDeps): Promise<AppHandle> {
         throw new ActionError(400, 'bad_config', err instanceof Error ? err.message : String(err));
       }
       const result = await scanAll(config, runner, enricher.listRepos);
-      const keepGithub = new Map(repos.filter((r) => r.github).map((r) => [r.repoSlug, r.github]));
-      const localRepos = result.repos.map((r) => ({ ...r, github: (r.repoSlug && keepGithub.get(r.repoSlug)) || null }));
-      const combined = withCatalog(result.shelves, localRepos);
-      shelves = combined.shelves;
-      repos = combined.repos;
-      enrichInBackground(localRepos.filter((r) => r.repoSlug && !r.github));
+      local = { shelves: result.shelves, repos: result.repos.map((r) => ({ ...r, github: (r.repoSlug && keepGithub.get(r.repoSlug)) || null })) };
+      publishState();
+      enrichInBackground(local.repos.filter((r) => r.repoSlug && !r.github));
     }
-    // Keep shelf order identical to config order.
-    const order = new Map([...shelves.filter((s) => s.kind === 'catalog').map((s, i) => [s.id, i] as const), ...config.shelves.map((s, i) => [entryId(s), i + 100] as const)]);
-    shelves.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   }
 
   await rescan();
@@ -222,8 +241,8 @@ export async function createApp(deps: AppDeps): Promise<AppHandle> {
       config = { ...config, shelves: [...config.shelves, entry] };
       saveConfig(deps.configFile, config);
       const { shelf, repos: fresh } = await scanShelf(entry, runner, enricher.listRepos);
-      shelves = [...shelves, shelf];
-      repos = [...repos, ...fresh];
+      local = { shelves: [...local.shelves, shelf], repos: [...local.repos, ...fresh] };
+      publishState();
       enrichInBackground(fresh);
       hub.broadcast('state:changed', { reason: 'shelf:add' });
       res.json(state());
@@ -237,8 +256,8 @@ export async function createApp(deps: AppDeps): Promise<AppHandle> {
       if (!entryById(id)) throw new ActionError(404, 'not_found', 'Unknown shelf.');
       config = { ...config, shelves: config.shelves.filter((s) => entryId(s) !== id) };
       saveConfig(deps.configFile, config);
-      shelves = shelves.filter((s) => s.id !== id);
-      repos = repos.filter((r) => r.shelfId !== id);
+      local = { shelves: local.shelves.filter((s) => s.id !== id), repos: local.repos.filter((r) => r.shelfId !== id) };
+      publishState();
       hub.broadcast('state:changed', { reason: 'shelf:remove' });
       res.json(state());
     }),

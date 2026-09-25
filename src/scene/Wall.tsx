@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { isFiltering, useShelf, type ShelfState } from '../store';
-import { matches } from '../derive';
+import { matches, notYetCreated } from '../derive';
 import { themeById } from '../themes';
 import type { Repo } from '../types';
 import { backPanelTexture, bookTextures, sideColor, textureCacheStats, woodTexture } from './textures';
@@ -189,7 +189,7 @@ export function Wall() {
   // Rewind hides books not created yet; a dragged book leaves its slot empty.
   useEffect(() => {
     const hidden = new Set<string>();
-    if (timeline !== null) for (const s of layout.spines) if (!s.repo.createdAt || new Date(s.repo.createdAt).getTime() > timeline) hidden.add(s.repo.id);
+    if (timeline !== null) for (const s of layout.spines) if (notYetCreated(s.repo, timeline)) hidden.add(s.repo.id);
     if (dragId) hidden.add(dragId);
     field.hidden = hidden;
     field.writeAll();

@@ -17,6 +17,9 @@ import {
   MAX_HEIGHT,
   MIN_THICKNESS,
   MAX_THICKNESS,
+  createdBy,
+  notYetCreated,
+  rewindSpan,
 } from '../src/derive';
 import type { Repo } from '../src/types';
 
@@ -215,5 +218,27 @@ describe('filterChips', () => {
 
   it('matches the folder-only toolbar when there is no catalog', () => {
     expect(keys([repo({ id: 'a' })])).toEqual(['all', 'lang:Python', 'remote', 'dirty', 'stale']);
+  });
+});
+
+describe('rewind with undated books', () => {
+  const dated = (id: string, createdAt: string) => repo({ id, name: id, createdAt });
+  const undated = repo({ id: 'catalog-book', name: 'catalog-book', createdAt: null });
+  const repos = [dated('a', '2021-03-01T00:00:00Z'), dated('b', '2023-06-01T00:00:00Z'), undated];
+
+  it('starts a day before the first dated repo and replays only dated ones', () => {
+    expect(rewindSpan(repos)).toEqual({ start: Date.parse('2021-03-01T00:00:00Z') - 24 * 3600 * 1000, dated: 2 });
+    expect(createdBy(repos, Date.parse('2022-01-01T00:00:00Z'))).toBe(1);
+    expect(createdBy(repos, Date.now())).toBe(2);
+  });
+
+  it('keeps undated books on the shelf for the whole rewind instead of hiding them', () => {
+    expect(notYetCreated(undated, Date.parse('2000-01-01T00:00:00Z'))).toBe(false);
+    expect(notYetCreated(repos[1], Date.parse('2022-01-01T00:00:00Z'))).toBe(true);
+    expect(notYetCreated(repos[1], Date.parse('2024-01-01T00:00:00Z'))).toBe(false);
+  });
+
+  it('has nothing to replay when no book is dated, as on a catalog-only shelf', () => {
+    expect(rewindSpan([undated, repo({ id: 'bad', createdAt: 'not a date' })])).toBeNull();
   });
 });

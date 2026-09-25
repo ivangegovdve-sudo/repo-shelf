@@ -99,4 +99,18 @@ describe('mergeCatalog', () => {
     expect(merged.shelves.map((s) => s.id)).toEqual([...cat.shelves.map((s) => s.id), 'disk']);
     expect(mergeCatalog(null, [diskShelf], [clone])).toEqual({ shelves: [diskShelf], repos: [clone] });
   });
+
+  it('folds a GitHub-shelf duplicate’s live state into the catalog book; a link duplicate is just dropped', () => {
+    const cat = catalogToState(catalog([item(), item({ name: 'reader', full_name: 'ivangegovdve-sudo/reader' })]));
+    const ghShelf: Shelf = { id: 'gh', label: 'GitHub', path: null, kind: 'github', hidden: false, repoCount: 1 };
+    const linkShelf: Shelf = { id: 'links', label: 'Reads', path: null, kind: 'links', hidden: false, repoCount: 1 };
+    const live = local({ id: 'gh-voice', virtual: true, path: '', shelfId: 'gh', visibility: 'private', archived: true, createdAt: '2024-01-02T00:00:00Z' });
+    const link = local({ id: 'link-reader', virtual: true, path: '', shelfId: 'links', repoSlug: 'ivangegovdve-sudo/reader', visibility: null });
+    const merged = mergeCatalog(cat, [ghShelf, linkShelf], [live, link]);
+    expect(merged.repos.map((r) => r.id)).toEqual(cat.repos.map((r) => r.id));
+    const [voice, reader] = merged.repos;
+    expect(voice).toMatchObject({ visibility: 'private', archived: true, createdAt: '2024-01-02T00:00:00Z' });
+    expect(voice.catalog).toMatchObject({ kind: 'original', githubShelfId: 'gh' });
+    expect(reader).toEqual(cat.repos[1]);
+  });
 });

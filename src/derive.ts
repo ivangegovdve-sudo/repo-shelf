@@ -153,6 +153,44 @@ export function matches(
   return q.split(/\s+/).every((term) => hay.includes(term));
 }
 
+/** When a repo was created, for rewind; null when unknown (catalog books carry no creation date). */
+export function createdTime(r: Repo): number | null {
+  const t = r.createdAt ? new Date(r.createdAt).getTime() : NaN;
+  return Number.isFinite(t) ? t : null;
+}
+
+/**
+ * Where a rewind starts (a day before the first dated repo) and how many repos it replays.
+ * Undated repos sit the rewind out: they stay on the shelf and are not counted. Null when nothing is dated.
+ */
+export function rewindSpan(repos: Repo[]): { start: number; dated: number } | null {
+  let first = Infinity;
+  let dated = 0;
+  for (const r of repos) {
+    const t = createdTime(r);
+    if (t === null) continue;
+    dated++;
+    if (t < first) first = t;
+  }
+  return dated ? { start: first - 24 * 3600 * 1000, dated } : null;
+}
+
+/** Whether a repo is still to come at this point of the rewind. Undated repos never are. */
+export function notYetCreated(r: Repo, timeline: number): boolean {
+  const t = createdTime(r);
+  return t !== null && t > timeline;
+}
+
+/** Repos a rewind has brought onto the shelf by this point. */
+export function createdBy(repos: Repo[], timeline: number): number {
+  let n = 0;
+  for (const r of repos) {
+    const t = createdTime(r);
+    if (t !== null && t <= timeline) n++;
+  }
+  return n;
+}
+
 export function relativeTime(iso: string | null, now: Date = new Date()): string {
   if (!iso) return 'never';
   const then = new Date(iso).getTime();
