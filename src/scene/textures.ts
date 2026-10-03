@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Repo } from '../types';
 import { bookColor, displayName, hasGoldBand, hasRedTab, isStale, languageOf } from '../derive';
 import type { Theme } from '../themes';
+import { subCategory } from '../taxonomy';
 
 type SpineEntry = { key: string; texture: THREE.CanvasTexture };
 type DetailEntry = { key: string; cover: THREE.CanvasTexture; page: THREE.CanvasTexture };
@@ -13,7 +14,7 @@ const detailCache = new Map<string, DetailEntry>();
 export const BOOK_TEXTURE_BUDGET = { spines: 8, details: 6 } as const;
 
 export function visualKey(r: Repo, staleDays: number): string {
-  return [r.name, languageOf(r), r.dirtyCount > 0, r.github?.stars ?? 0, r.virtual ? 'link' : isStale(r, staleDays), r.github?.description ?? '', r.visibility, r.archived, r.catalog?.kind, r.catalog?.upstream, r.catalog?.cardStale, r.catalog?.verificationStatus, r.catalog?.alive, r.lastCommitAt].join('|');
+  return [r.name, languageOf(r), r.dirtyCount > 0, r.github?.stars ?? 0, r.virtual ? 'link' : isStale(r, staleDays), r.github?.description ?? '', r.visibility, r.archived, r.catalog?.kind, r.catalog?.subCategory, r.catalog?.upstream, r.catalog?.cardStale, r.catalog?.verificationStatus, r.catalog?.alive, r.lastCommitAt].join('|');
 }
 
 function desaturate(hex: string, amount = 0.55): string {
@@ -100,9 +101,8 @@ function seedOf(value: string): number {
 }
 
 function catalogColors(r: Repo): { cloth: string; accent: string; paper: string; ink: string } {
-  const [cloth, accent] = PURPOSE_COLORS[r.shelfId] ?? PURPOSE_COLORS.unshelved;
-  if (r.catalog?.kind === 'reference-copy') return { cloth: desaturate(cloth, 0.72), accent: '#9d5547', paper: '#e9e2d3', ink: '#303338' };
-  if (r.catalog?.kind === 'authored-fork') return { cloth: '#714822', accent, paper: '#f0e6d2', ink: '#29231d' };
+  const [legacyCloth, accent] = PURPOSE_COLORS[r.catalog?.subCategory ?? r.shelfId] ?? PURPOSE_COLORS.unshelved;
+  const cloth = r.catalog?.subCategory ? subCategory(r.catalog.subCategory).color : legacyCloth;
   return { cloth, accent, paper: '#f2ead8', ink: '#25231f' };
 }
 
@@ -191,7 +191,7 @@ function drawCatalogSpine(r: Repo): HTMLCanvasElement {
   ctx.fillText(title, 0, -5);
   ctx.font = `600 13px ${SANS}`;
   ctx.fillStyle = colors.accent;
-  const edition = reference ? 'REFERENCE EDITION' : r.catalog!.kind === 'authored-fork' ? 'ADAPTED EDITION' : "IVAN'S ORIGINAL";
+  const edition = reference ? 'REFERENCE EDITION' : r.catalog!.kind === 'unverified-fork' ? 'UPSTREAM FORK' : r.catalog!.kind === 'authored-fork' ? 'ADAPTED EDITION' : "IVAN'S ORIGINAL";
   ctx.fillText(edition, 0, px / 2 + 17);
   ctx.restore();
   ctx.fillStyle = reference ? colors.accent : '#f4ead4';
@@ -239,7 +239,7 @@ function drawCatalogCover(r: Repo): HTMLCanvasElement {
   ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = colors.accent;
   ctx.font = `700 15px ${SANS}`;
-  ctx.fillText(PURPOSE_LABELS[r.shelfId] ?? 'REPOSITORY COLLECTION', W / 2, 82);
+  ctx.fillText(subCategory(r.catalog?.subCategory ?? r.shelfId).label.toUpperCase(), W / 2, 82);
 
   ctx.fillStyle = reference ? colors.ink : '#f7f0df';
   ctx.textBaseline = 'top';
@@ -548,7 +548,7 @@ function drawPage(r: Repo): HTMLCanvasElement {
     ctx.fillText(`UPSTREAM SOURCE · ${r.catalog.upstream}`.toUpperCase(), W / 2, H - 88);
     ctx.fillStyle = '#7a7268';
     ctx.font = `400 13px ${SANS}`;
-    ctx.fillText(r.catalog.kind === 'reference-copy' ? 'Zero commits ahead · catalogued as reference, not original work' : `${r.catalog.commitsAhead} commits ahead in Ivan's fork`, W / 2, H - 62);
+    ctx.fillText(r.catalog.kind === 'reference-copy' ? 'Unchanged upstream project' : r.catalog.commitsAhead === null ? 'Comparison unavailable · upstream history has no common ancestor' : `${r.catalog.commitsAhead} commits ahead in Ivan's fork`, W / 2, H - 62);
   } else {
     ctx.fillText(r.catalog ? "Original repository by Ivan Gegov" : 'README, commits, issues and pull requests are on the pages to the right', W / 2, H - 88);
   }

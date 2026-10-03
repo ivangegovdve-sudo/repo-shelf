@@ -146,6 +146,7 @@ export function matches(
     r.repoSlug ?? '',
     r.summary ?? '',
     r.catalog?.upstream ?? '',
+    r.catalog?.subCategory?.replaceAll('-', ' ') ?? '',
     ...(r.github?.topics ?? []),
   ]
     .join('\n')
