@@ -5,6 +5,7 @@ import { api } from '../api';
 import { bookColor, displayName, editionOf, formatSize, isStale, languageOf, relativeTime } from '../derive';
 import { BookPages, DocPages, type Chapter } from './BookPages';
 import { BookViewer } from './BookViewer';
+import { subCategory } from '../taxonomy';
 import { useWall } from '../scene/wallStore';
 import type { OpenTarget, Repo } from '../types';
 
@@ -38,13 +39,14 @@ function Attribution({ repo }: { repo: Repo }) {
   const upstreamUrl = `https://github.com/${c.upstream}`;
   return (
     <div className={`attribution ${c.kind}`}>
-      <strong>{c.kind === 'reference-copy' ? 'Reference copy of upstream work' : 'Adapted from upstream'}</strong>
+      <strong>{c.kind === 'reference-copy' ? 'Reference copy of upstream work' : c.kind === 'unverified-fork' ? 'Fork of upstream · comparison unavailable' : 'Adapted from upstream'}</strong>
       <a href={upstreamUrl} target="_blank" rel="noopener" className="attribution-upstream">
         {c.upstream} ↗
       </a>
       <small>
         {c.kind === 'reference-copy'
-          ? 'Zero commits of Ivan’s own. Shelved as a reference; the authorship belongs upstream.'
+          ? 'Unchanged upstream project. Authorship belongs to the upstream contributors.'
+          : c.kind === 'unverified-fork' ? 'Upstream history is unavailable or has no common ancestor. Contributions could not be verified.'
           : `Ivan’s fork carries ${c.commitsAhead} ${c.commitsAhead === 1 ? 'commit' : 'commits'} of his own on top; the original work belongs upstream.`}
       </small>
     </div>
@@ -162,7 +164,7 @@ export function DetailPanel() {
               </div>
             )}
             <h2 className="panel-title">{displayName(repo.name)}</h2>
-            <div className="panel-slug">{repo.doc ? docPathLabel(repo) : (repo.repoSlug ?? repo.name)}</div>
+            <div className="panel-slug">{repo.doc ? docPathLabel(repo) : c?.kind === 'reference-copy' ? c.upstream : (repo.repoSlug ?? repo.name)}</div>
             <Attribution repo={repo} />
             <p className="panel-desc">
               {repo.github?.description ??
@@ -177,6 +179,7 @@ export function DetailPanel() {
         </section>
 
         <div className="tags">
+          {c?.subCategory && <span className="tag" style={{ background: subCategory(c.subCategory).color, color: '#fff' }}>{subCategory(c.subCategory).label}</span>}
           {!repo.doc && (
             <span className="tag" style={{ background: bookColor(lang) }}>
               {lang}
@@ -211,10 +214,10 @@ export function DetailPanel() {
               <dt>Status</dt>
               <dd>{c.alive ? 'Alive, pushed within a year' : 'Dormant for over a year'}</dd>
             </div>
-            <div>
-              <dt>Ivan’s commits</dt>
-              <dd>{c.kind === 'original' ? 'All of them' : c.commitsAhead}</dd>
-            </div>
+            {c.kind !== 'reference-copy' && <div>
+              <dt>Commits ahead</dt>
+              <dd>{c.kind === 'original' ? 'Original project' : c.commitsAhead ?? 'Unavailable'}</dd>
+            </div>}
             {c.upstream && (
               <div className="span2">
                 <dt>Upstream</dt>
@@ -300,12 +303,12 @@ export function DetailPanel() {
             <a className="btn primary" href={repo.linkUrl ?? c.repoUrl} target="_blank" rel="noopener">
               {c.upstream ? 'View upstream source ↗' : 'View on GitHub ↗'}
             </a>
-            {c.upstream && (
+            {c.upstream && c.kind !== 'reference-copy' && (
               <a className="btn" href={c.repoUrl} target="_blank" rel="noopener">
                 View Ivan’s fork ↗
               </a>
             )}
-            {!readOnly && repo.remoteUrl && (
+            {!readOnly && repo.remoteUrl && c.kind !== 'reference-copy' && (
               <button className="btn" onClick={() => openDialog({ kind: 'clone', repoId: repo.id })} disabled={!diskShelves.length}>
                 Clone Ivan’s copy…
               </button>

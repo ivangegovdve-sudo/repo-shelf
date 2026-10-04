@@ -19,7 +19,7 @@ export interface StaticShelfData {
 export const PROJECT_URL = 'https://github.com/ivangegovdve-sudo/repo-shelf';
 
 function isPublic(r: Repo): boolean {
-  if (r.visibility === 'private' || r.archived) return false;
+  if (r.visibility === 'private' || (r.archived && !r.catalog)) return false;
   if (r.virtual) return true; // link books and public GitHub books
   return r.visibility === 'public' && Boolean(r.repoSlug);
 }
@@ -36,6 +36,12 @@ export function sanitizeForPublish(state: AppState, owner: string | null): Pick<
     dirtyCount: 0,
     error: undefined,
     linkUrl: r.linkUrl ?? (r.repoSlug ? `https://github.com/${r.repoSlug}` : null),
+    ...(r.catalog?.kind === 'reference-copy' && r.catalog.upstream ? {
+      owner: r.catalog.upstream.split('/')[0], repoSlug: r.catalog.upstream,
+      remoteUrl: `https://github.com/${r.catalog.upstream}.git`,
+      catalog: { ...r.catalog, repoUrl: `https://github.com/${r.catalog.upstream}` },
+      github: r.github ? { ...r.github, htmlUrl: `https://github.com/${r.catalog.upstream}` } : null,
+    } : {}),
   }));
   const keep = new Set(repos.map((r) => r.shelfId));
   const shelves = state.shelves

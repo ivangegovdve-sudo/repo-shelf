@@ -161,6 +161,28 @@ code {
   border-bottom: 1px solid var(--line);
   background: var(--page);
   min-width: 0;
+  flex-wrap: wrap;
+}
+.filter-search-row, .taxonomy-row { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; }
+.filter-search-row .search { flex: 1 1 360px; max-width: 520px; margin: 0; }
+.filter-result { margin-left: auto; white-space: nowrap; font-size: 12px; font-variant-numeric: tabular-nums; }
+.filter-clear { white-space: nowrap; }
+.filter-label { width: 78px; flex: 0 0 78px; color: var(--muted); font-size: 11px; }
+.taxonomy-row .color-chips { flex-wrap: wrap; }
+.category-swatch { width: 12px; height: 12px; border-radius: 3px; flex: 0 0 12px; border: 1px solid rgba(255,255,255,.25); }
+.edition-filters { font-size: 11px; color: var(--muted); }
+.edition-filters summary { cursor: pointer; }
+.edition-filters .chips { margin-top: 6px; flex-wrap: wrap; }
+.active-filters { flex: 1 1 280px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .filter-search-row { flex-wrap: wrap; gap: 6px; }
+  .filter-search-row .search { flex-basis: 100%; max-width: none; }
+  .filter-result { margin-left: 0; }
+  .filter-clear { margin-left: auto; }
+  .filter-label { width: 66px; flex-basis: 66px; }
+  .taxonomy-row .chips { flex-wrap: nowrap; order: 0; }
+  .taxonomy-row .chip { min-height: 34px; }
+  .active-filters { flex-basis: 100%; max-height: 52px; overflow-y: auto; }
 }
 .search {
   flex: 0 1 360px;
@@ -260,6 +282,8 @@ code {
   align-items: center;
   white-space: nowrap;
 }
+.active-filters.chips-meta { white-space: normal; flex-wrap: wrap; gap: 6px; min-width: 0; max-width: 100%; }
+.active-filters > span { min-width: 0; overflow-wrap: anywhere; }
 .hint {
   color: color-mix(in srgb, var(--muted) 80%, transparent);
 }

@@ -1,5 +1,6 @@
 import type { Repo } from '../types';
 import { bookColor, editionOf, isStale, languageOf, type Edition } from '../derive';
+import { subCategory } from '../taxonomy';
 
 /**
  * How a spine announces its edition with no hover and no cover. Three
@@ -63,12 +64,17 @@ function faded(color: string): string {
 
 export function spineStyle(repo: Repo, staleDays: number): SpineStyle {
   const edition = editionOf(repo);
+  if (repo.catalog?.kind === 'unverified-fork') return {
+    edition, cloth: subCategory(repo.catalog.subCategory).color,
+    ink: contrastRatio('#ffffff', subCategory(repo.catalog.subCategory).color) >= 4.5 ? '#ffffff' : '#000000',
+    head: 'rule', foot: 'fork', accent: '#f2ead8',
+  };
   if (edition !== 'plain') {
     const family = EDITION_CLOTH[edition];
     return {
       edition,
-      cloth: family[hash(repo.id || repo.name) % family.length],
-      ink: EDITION_INK[edition],
+      cloth: repo.catalog?.subCategory ? subCategory(repo.catalog.subCategory).color : family[hash(repo.id || repo.name) % family.length],
+      ink: repo.catalog?.subCategory ? (contrastRatio('#ffffff', subCategory(repo.catalog.subCategory).color) >= 4.5 ? '#ffffff' : '#000000') : EDITION_INK[edition],
       head: edition === 'original' ? 'gilt-rules' : edition === 'adapted' ? 'copper-band' : 'rule',
       foot: edition === 'original' ? 'ornament' : edition === 'adapted' ? 'fork' : 'call-number',
       accent: EDITION_ACCENT[edition],

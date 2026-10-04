@@ -42,8 +42,9 @@ describe('catalogToState', () => {
       item({ name: 'mystery', full_name: 'ivangegovdve-sudo/mystery', topics: [], summary: 'A collection of assorted experiments.' }),
     ]));
     expect(state.repos).toHaveLength(2);
-    expect(state.repos.find((r) => r.name === 'voice-tool')?.shelfId).toBe('voice-audio');
-    expect(state.repos.find((r) => r.name === 'mystery')?.shelfId).toBe('unshelved');
+    expect(state.repos.find((r) => r.name === 'voice-tool')?.shelfId).toBe('creative');
+    expect(state.repos.find((r) => r.name === 'voice-tool')?.catalog?.subCategory).toBe('voice-audio');
+    expect(state.repos.find((r) => r.name === 'mystery')?.shelfId).toBe('explore');
     expect(state.repos.every((r) => state.shelves.some((s) => s.id === r.shelfId))).toBe(true);
   });
 

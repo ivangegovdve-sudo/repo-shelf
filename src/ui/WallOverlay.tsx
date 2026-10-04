@@ -7,13 +7,14 @@ import type { Repo } from '../types';
 /** What a fork is, in one line, naming the upstream whenever there is one. */
 export function editionLine(repo: Repo): { label: string; upstream: string | null; note: string | null } {
   const c = repo.catalog;
+  if (c?.kind === 'unverified-fork') return { label: 'Fork · comparison unavailable', upstream: c.upstream, note: 'Upstream history unavailable; authorship is unverified' };
   switch (editionOf(repo)) {
     case 'original':
       return { label: 'Ivan’s original', upstream: null, note: null };
     case 'adapted':
       return { label: 'Adapted fork', upstream: c!.upstream, note: `${c!.commitsAhead} ${c!.commitsAhead === 1 ? 'commit' : 'commits'} of Ivan’s on top` };
     case 'reference':
-      return { label: 'Reference copy', upstream: c!.upstream, note: 'Not Ivan’s work: zero commits of his own' };
+      return { label: 'Upstream project', upstream: c!.upstream, note: 'Unchanged source · upstream authorship' };
     default:
       return {
         label: repo.doc ? 'Guide' : repo.virtual ? (repo.repoSlug ? 'On GitHub' : 'Link') : languageOf(repo),

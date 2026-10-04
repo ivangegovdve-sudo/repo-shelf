@@ -107,7 +107,7 @@ test.describe('spine-out wall (published catalog)', () => {
       (window as unknown as { __SHELF_STATIC: unknown }).__SHELF_STATIC = data;
     }, { owner: 'ivangegovdve-sudo', title: 'E2E library', generatedAt: '2026-09-25T00:00:00Z', sourceUrl: 'https://example.com', shelves: state.shelves, repos: state.repos, pages: {} });
     await page.goto('/');
-    await expect(page.locator('.plate').first()).toContainText('Voice & Audio');
+    await expect(page.locator('.plate').first()).toContainText('Creative & Media');
   });
 
   test('shelves Ivan’s work before reference copies and names the upstream on hover', async ({ page }) => {
@@ -119,9 +119,9 @@ test.describe('spine-out wall (published catalog)', () => {
     expect(order).toEqual(['original:echo-original', 'adapted:echo-adapted', 'reference:echo-reference']);
     const ref = await spinePoint(page, 'echo-reference');
     await page.mouse.move(ref.x, ref.y);
-    await expect(page.locator('.spine-tip .tip-edition')).toContainText('Reference copy');
+    await expect(page.locator('.spine-tip .tip-edition')).toContainText('Upstream project');
     await expect(page.locator('.spine-tip .tip-upstream')).toHaveText('Copy of upstream-org/echo-reference');
-    await expect(page.locator('.spine-tip')).toContainText('Not Ivan’s work');
+    await expect(page.locator('.spine-tip')).toContainText('upstream authorship');
     const adapted = await spinePoint(page, 'echo-adapted');
     await page.mouse.move(adapted.x, adapted.y);
     await expect(page.locator('.spine-tip .tip-upstream')).toHaveText('Forked from upstream-org/echo-adapted');
@@ -149,7 +149,9 @@ test.describe('spine-out wall (published catalog)', () => {
     await expect(win.locator('.bw-edition')).toHaveText('Reference copy');
     await expect(win.locator('.attribution-upstream')).toHaveAttribute('href', 'https://github.com/upstream-org/echo-reference');
     await expect(win.getByRole('link', { name: 'View upstream source ↗' })).toHaveAttribute('href', 'https://github.com/upstream-org/echo-reference');
-    await expect(win.getByRole('link', { name: 'View Ivan’s fork ↗' })).toHaveAttribute('href', 'https://github.com/ivangegovdve-sudo/echo-reference');
+    await expect(win.getByRole('link', { name: 'View Ivan’s fork ↗' })).toHaveCount(0);
+    await expect(win.locator('.panel-slug')).toHaveText('upstream-org/echo-reference');
+    await expect(win).not.toContainText('Ivan');
     await expect(win).toContainText('Last push');
     await expect(win).toContainText('Python');
     await expect(win.locator('.book-right')).toHaveCount(0);

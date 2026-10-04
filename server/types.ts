@@ -54,12 +54,14 @@ export interface GitHubMeta {
 
 export interface CatalogMeta {
   /** Attribution class: reference copies contain no commits by Ivan. */
-  kind: 'original' | 'authored-fork' | 'reference-copy';
+  kind: 'original' | 'authored-fork' | 'reference-copy' | 'unverified-fork';
   /** GitHub owner/name of the project this fork came from. */
   upstream: string | null;
-  commitsAhead: number;
+  commitsAhead: number | null;
   /** Ivan's repository URL; fork books primarily link to upstream instead. */
   repoUrl: string;
+  /** Smaller purpose category, also the book's color identity. */
+  subCategory?: string;
   cardStale: boolean;
   verificationStatus: 'verified' | 'unverified';
   confidence: 'high' | 'medium' | 'low' | 'unrecorded';

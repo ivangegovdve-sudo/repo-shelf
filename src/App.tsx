@@ -11,12 +11,14 @@ import { RewindOverlay } from './ui/Rewind';
 import { WallOverlay } from './ui/WallOverlay';
 import { WallMap } from './ui/WallMap';
 import { staticData } from './static';
+import { useShallow } from 'zustand/react/shallow';
+import { selectVisibleRepos } from './store';
 
 export function App() {
   const loaded = useShelf((s) => s.loaded);
   const loadError = useShelf((s) => s.loadError);
   const shelves = useShelf((s) => s.shelves);
-  const repos = useShelf((s) => s.repos);
+  const repos = useShelf(useShallow(selectVisibleRepos));
   const busy = useShelf((s) => s.busy);
   const hasSelection = useShelf((s) => s.selectedRepoId !== null);
 
@@ -76,7 +78,7 @@ export function App() {
         <ul id="book-index" className="sr-only" aria-label="All repos">
           {repos.map((r) => (
             <li key={r.id}>
-              <button data-book={r.name} data-shelf={r.shelfId} onClick={() => useShelf.getState().select(r.id)}>
+              <button data-book={r.name} data-shelf={r.shelfId} data-subcategory={r.catalog?.subCategory} onClick={() => useShelf.getState().select(r.id)}>
                 {r.name}{r.catalog ? ` — ${r.catalog.kind}${r.catalog.upstream ? `, upstream ${r.catalog.upstream}` : ''}` : ''}
               </button>
             </li>

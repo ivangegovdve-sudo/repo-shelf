@@ -1,13 +1,14 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import type { AppState, Repo, Shelf } from './types.js';
+import { TOP_CATEGORIES, subCategory } from '../src/taxonomy.js';
 
 export interface CatalogRepo {
   name: string;
   full_name: string;
   fork: boolean;
   upstream: string | null;
-  commits_ahead: number;
+  commits_ahead: number | null;
   last_push: string | null;
   language: string;
   topics: string[];
@@ -18,6 +19,9 @@ export interface CatalogRepo {
   confidence: 'high' | 'medium' | 'low' | 'unrecorded';
   verification_status: 'verified' | 'unverified';
   topics_source: string;
+  archived?: boolean;
+  created_at?: string;
+  stars?: number;
 }
 
 export interface CatalogDocument {
@@ -90,23 +94,24 @@ export function parseCatalog(value: unknown): CatalogDocument {
 export function catalogToState(value: unknown): AppState {
   const doc = parseCatalog(value);
   const repos = doc.repos.map<Repo>((item) => {
-    const kind = item.fork ? (item.commits_ahead === 0 ? 'reference-copy' : 'authored-fork') : 'original';
-    const shelfId = assignPurpose(item);
+    const kind = item.fork ? (item.commits_ahead === null ? 'unverified-fork' : item.commits_ahead === 0 ? 'reference-copy' : 'authored-fork') : 'original';
+    const subId = assignPurpose(item);
+    const shelfId = subCategory(subId).top;
     const upstreamUrl = item.upstream ? `https://github.com/${item.upstream}` : null;
     const repoUrl = `https://github.com/${item.full_name}`;
     return {
       id: crypto.createHash('sha1').update(`catalog:${item.full_name.toLowerCase()}`).digest('hex').slice(0, 16),
       name: item.name, path: '', shelfId, virtual: true,
-      linkUrl: upstreamUrl ?? repoUrl, visibility: 'public', archived: false,
-      createdAt: null, doc: null, summary: item.summary, branch: null,
-      lastCommitAt: item.last_push, commitCount: Math.max(0, item.commits_ahead), dirtyCount: 0, sizeKB: 0,
+      linkUrl: upstreamUrl ?? repoUrl, visibility: 'public', archived: item.archived ?? false,
+      createdAt: item.created_at ?? null, doc: null, summary: item.summary, branch: null,
+      lastCommitAt: item.last_push, commitCount: Math.max(0, item.commits_ahead ?? 0), dirtyCount: 0, sizeKB: 0,
       languageGuess: item.language || null, remoteUrl: `${repoUrl}.git`, owner: item.full_name.split('/')[0] ?? null,
       repoSlug: item.full_name, github: {
-        description: item.summary, language: item.language || null, stars: 0, topics: item.topics,
+        description: item.summary, language: item.language || null, stars: item.stars ?? 0, topics: item.topics,
         isPrivate: false, isFork: item.fork, pushedAt: item.last_push ?? '', htmlUrl: repoUrl, fetchedAt: doc.generated_at,
       },
       catalog: {
-        kind, upstream: item.upstream, commitsAhead: item.commits_ahead, repoUrl,
+        kind, upstream: item.upstream, commitsAhead: item.commits_ahead, repoUrl, subCategory: subId,
         cardStale: item.stale, verificationStatus: item.verification_status,
         confidence: item.confidence, cardGeneratedAt: item.card_generated_at,
         alive: Boolean(item.last_push) && new Date(doc.generated_at).getTime() - new Date(item.last_push!).getTime() <= 365 * 24 * 60 * 60 * 1000,
@@ -115,7 +120,7 @@ export function catalogToState(value: unknown): AppState {
   });
   const counts = new Map<string, number>();
   for (const repo of repos) counts.set(repo.shelfId, (counts.get(repo.shelfId) ?? 0) + 1);
-  const definitions = [...PURPOSE_SHELVES, UNSHELVED];
+  const definitions = TOP_CATEGORIES;
   const shelves = definitions
     .filter((definition) => (counts.get(definition.id) ?? 0) > 0)
     .map<Shelf>((definition) => ({ id: definition.id, label: definition.label, path: null, kind: 'catalog', hidden: false, repoCount: counts.get(definition.id) ?? 0 }));

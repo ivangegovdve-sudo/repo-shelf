@@ -6,15 +6,18 @@ Your git repos as books on a 3D bookshelf, spine-out, the way a real library loo
 
 Built with React Three Fiber, Express, and `gh`. Runs on your machine only. Windows, macOS and Linux.
 
-This fork also opens with Ivan's public repoindex catalog already bound as books. Shelves are derived from each capability card's purpose, not language or stars. Originals, authored forks, and zero-ahead reference copies use different bindings; every fork names and links to its upstream source. Stale or unverified cards are labelled rather than presented as current facts.
+This fork opens with a complete public repository catalog, regenerated from the live GitHub inventory. Six broad shelves group the smaller purposes: AI & Knowledge, Creative & Media, Software & Systems, Security & Finance, Mobile & Devices, and Other & Exploration. Every repo remains a book, including archived public projects.
 
-The shelf is a wooden wall with one bay per purpose, separated by real divider boards. Every spine shows its edition without any hovering:
+The shelf is a wooden wall with one bay per top category, separated by real divider boards. Book cloth, covers and filter swatches share a stable color per smaller purpose. Edition marks show authorship without changing that color:
 
-- **Originals** are burgundy cloth with gilt lettering, gilt rules and a gilt ornament. They are the widest, tallest volumes.
-- **Adapted forks**, which carry commits of Ivan's own, are navy cloth with cream lettering, a copper head band and a fork mark.
-- **Reference copies**, forks with zero commits of Ivan's, are pale archival buckram with dark ink and a library call-number sticker. They are the slimmest volumes.
+- **Originals** have gilt rules and an ornament. They are the widest, tallest volumes.
+- **Adapted forks** have a copper head band and fork mark.
+- **Reference copies** have a library call-number sticker. Their details and published identity lead to upstream, without naming the collecting account.
+- **Unverified forks** retain upstream attribution and a fork mark when upstream comparison is unavailable; they make no contribution claim.
 
-Inside each bay, Ivan's own work comes first. Hovering (or keyboard-focusing) any fork names its upstream straight away; a reference copy's tooltip says it is a copy of that upstream and not Ivan's work. Clicking a spine folds the book out: the 3D book turns from spine to cover, the upstream is printed on the cover, and the cover opens to a readable first page.
+Select several top categories or book colors to narrow the wall. Selections combine with search and the optional edition filters: OR within each level, AND across levels. The toolbar shows matching/total counts, named active filters, an empty-result message and a Clear filters control. On phones the category/color rows scroll horizontally. The screen-reader book index follows the same filtered set as the 3D wall.
+
+Inside each bay, originals and adapted forks come first. Hovering or keyboard-focusing a fork names upstream immediately. Clicking a spine folds the book out into a 3D cover with upstream attribution and a readable first page. See [catalog refresh instructions](data/README.md).
 
 ![repo shelf](docs/media/screenshot-shelf.png)
 

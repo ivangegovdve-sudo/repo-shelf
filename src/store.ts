@@ -4,6 +4,7 @@ import { api, ApiError, subscribeEvents } from './api';
 import { compareOnShelf, matches, type Filter } from './derive';
 import { applyThemeCss, loadThemeId, saveThemeId, themeById } from './themes';
 import { staticData, staticState } from './static';
+import { matchesTaxonomy } from './taxonomy';
 
 export type DialogKind = 'move' | 'rename' | 'mkdir' | 'shelves' | 'clone' | 'visibility' | 'delete' | 'create' | 'publish';
 
@@ -51,6 +52,10 @@ export interface ShelfState {
   query: string;
   filter: Filter;
   activeShelfId: string;
+  categoryFilters: string[];
+  subCategoryFilters: string[];
+  toggleCategory: (id: string) => void;
+  toggleSubCategory: (id: string) => void;
   selectedRepoId: string | null;
   hoveredRepoId: string | null;
   /** Keyboard focus on the wall: arrows move it, Enter opens it. */
@@ -124,6 +129,10 @@ export const useShelf = create<ShelfState>()((set, get) => ({
   query: '',
   filter: 'all',
   activeShelfId: 'all',
+  categoryFilters: [],
+  subCategoryFilters: [],
+  toggleCategory: (id) => set((st) => ({ categoryFilters: st.categoryFilters.includes(id) ? st.categoryFilters.filter((x) => x !== id) : [...st.categoryFilters, id] })),
+  toggleSubCategory: (id) => set((st) => ({ subCategoryFilters: st.subCategoryFilters.includes(id) ? st.subCategoryFilters.filter((x) => x !== id) : [...st.subCategoryFilters, id] })),
   selectedRepoId: null,
   hoveredRepoId: null,
   focusedRepoId: null,
@@ -180,7 +189,7 @@ export const useShelf = create<ShelfState>()((set, get) => ({
   setQuery: (query) => set({ query }),
   setFilter: (filter) => set({ filter }),
   setActiveShelf: (activeShelfId) => set({ activeShelfId }),
-  clearFilters: () => set({ query: '', filter: 'all', activeShelfId: 'all' }),
+  clearFilters: () => set({ query: '', filter: 'all', activeShelfId: 'all', categoryFilters: [], subCategoryFilters: [] }),
   select: (selectedRepoId) => set((st) => ({ selectedRepoId, focusedRepoId: selectedRepoId ?? st.focusedRepoId })),
   hover: (hoveredRepoId) => set({ hoveredRepoId }),
   setFocused: (focusedRepoId) => set({ focusedRepoId }),
@@ -280,11 +289,12 @@ export function selectVisibleRepos(st: ShelfState): Repo[] {
   const order = new Map(st.shelves.map((s, i) => [s.id, i]));
   return st.repos
     .filter((r) => matches(r, st.query, st.filter, st.activeShelfId, st.staleAfterDays))
+    .filter((r) => matchesTaxonomy(r.shelfId, r.catalog?.subCategory, st.categoryFilters, st.subCategoryFilters))
     .sort((a, b) => (order.get(a.shelfId) ?? 0) - (order.get(b.shelfId) ?? 0) || compareOnShelf(a, b));
 }
 
 export function isFiltering(st: ShelfState): boolean {
-  return st.query.trim() !== '' || st.filter !== 'all' || st.activeShelfId !== 'all';
+  return st.query.trim() !== '' || st.filter !== 'all' || st.activeShelfId !== 'all' || st.categoryFilters.length > 0 || st.subCategoryFilters.length > 0;
 }
 
 /** Boot: load state, subscribe to SSE. Returns cleanup. */

@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { isFiltering, useShelf, type ShelfState } from '../store';
 import { matches, notYetCreated } from '../derive';
+import { matchesTaxonomy } from '../taxonomy';
 import { themeById } from '../themes';
 import type { Repo } from '../types';
 import { backPanelTexture, bookTextures, sideColor, textureCacheStats, woodTexture } from './textures';
@@ -55,6 +56,8 @@ export function Wall() {
   const query = useShelf((s) => s.query);
   const filter = useShelf((s) => s.filter);
   const activeShelfId = useShelf((s) => s.activeShelfId);
+  const categories = useShelf((s) => s.categoryFilters);
+  const subs = useShelf((s) => s.subCategoryFilters);
   const staleAfterDays = useShelf((s) => s.staleAfterDays);
   const timeline = useShelf((s) => s.timeline);
   const theme = useShelf((s) => themeById(s.themeId));
@@ -67,8 +70,8 @@ export function Wall() {
   const occludeRight = useWall((s) => s.occludeRight);
 
   const displayed = useMemo(
-    () => repos.filter((r) => matches(r, query, filter, activeShelfId, staleAfterDays)),
-    [repos, query, filter, activeShelfId, staleAfterDays],
+    () => repos.filter((r) => matches(r, query, filter, activeShelfId, staleAfterDays) && matchesTaxonomy(r.shelfId, r.catalog?.subCategory, categories, subs)),
+    [repos, query, filter, activeShelfId, staleAfterDays, categories, subs],
   );
   const byShelf = useMemo(() => {
     const m = new Map<string, Repo[]>();
@@ -98,7 +101,7 @@ export function Wall() {
       return;
     }
     useWall.getState().setTarget({ x: 0 });
-  }, [query, filter, activeShelfId]);
+  }, [query, filter, activeShelfId, categories, subs]);
 
   const caseStyle = useShelf((s) => s.caseStyle);
   const structure = useMemo(() => buildStructure(layout, caseStyle), [layout, caseStyle]);
