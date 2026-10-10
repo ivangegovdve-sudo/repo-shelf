@@ -1,20 +1,23 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useShelf } from '../store';
-import { displayName, editionOf, languageOf, relativeTime } from '../derive';
+import { editionOf, languageOf, relativeTime, repoTitleOf } from '../derive';
+import { starCountOf } from '../repoFilters';
+import { referenceUpstream } from '../repoIdentity';
 import { useWall, wallView } from '../scene/wallStore';
 import type { Repo } from '../types';
 
 /** What a fork is, in one line, naming the upstream whenever there is one. */
 export function editionLine(repo: Repo): { label: string; upstream: string | null; note: string | null } {
   const c = repo.catalog;
-  if (c?.kind === 'unverified-fork') return { label: 'Fork · comparison unavailable', upstream: c.upstream, note: 'Upstream history unavailable; authorship is unverified' };
+  const authoredCommits = c?.authoredCommitsAhead !== undefined ? c.authoredCommitsAhead : c?.commitsAhead;
+  if (c?.kind === 'unverified-fork') return { label: 'Fork · authorship unverified', upstream: c.upstream, note: 'Contributions could not be verified against public upstream history' };
   switch (editionOf(repo)) {
     case 'original':
       return { label: 'Ivan’s original', upstream: null, note: null };
     case 'adapted':
-      return { label: 'Adapted fork', upstream: c!.upstream, note: `${c!.commitsAhead} ${c!.commitsAhead === 1 ? 'commit' : 'commits'} of Ivan’s on top` };
+      return { label: 'Adapted fork', upstream: c!.upstream, note: authoredCommits === null ? 'Authorship could not be verified' : `${authoredCommits} ${authoredCommits === 1 ? 'commit' : 'commits'} of Ivan’s on top` };
     case 'reference':
-      return { label: 'Upstream project', upstream: c!.upstream, note: 'Unchanged source · upstream authorship' };
+      return { label: 'Upstream project', upstream: c!.upstream, note: c!.commitsAhead === 0 ? 'Unchanged source · upstream authorship' : 'No changes authored by the collecting account · upstream authorship' };
     default:
       return {
         label: repo.doc ? 'Guide' : repo.virtual ? (repo.repoSlug ? 'On GitHub' : 'Link') : languageOf(repo),
@@ -38,7 +41,9 @@ function statusOf(repo: Repo): { alive: boolean; text: string } {
 
 export function announce(repo: Repo, shelfLabel: string | undefined): string {
   const e = editionLine(repo);
-  return `${displayName(repo.name)}. ${e.label}${e.upstream ? ` of ${e.upstream}` : ''}. ${shelfLabel ?? ''}. ${statusOf(repo).text}. Press Enter to open.`;
+  const upstream = referenceUpstream(repo);
+  const stars = starCountOf(repo);
+  return `${repoTitleOf(repo)}. ${e.label}${e.upstream && !upstream ? ` of ${e.upstream}` : ''}. ${upstream ? 'Upstream stars' : 'Stars'}: ${stars?.toLocaleString() ?? 'unavailable'}. ${shelfLabel ?? ''}. ${statusOf(repo).text}. Press Enter to open.`;
 }
 
 /** Put the tooltip above its spine (below when there is no room), clear of the book window. */
@@ -80,6 +85,9 @@ function SpineTip() {
   const line = editionLine(repo);
   const status = statusOf(repo);
   const purpose = purposeOf(repo);
+  const upstream = referenceUpstream(repo);
+  const collectorSlug = upstream && repo.repoSlug && repo.repoSlug.toLowerCase() !== upstream.toLowerCase() ? repo.repoSlug : null;
+  const stars = starCountOf(repo);
   return (
     <div ref={el} className={`spine-tip ed-${edition}`} role="tooltip">
       <div className="tip-edition">
@@ -88,8 +96,9 @@ function SpineTip() {
         {repo.catalog?.cardStale && <span className="tip-flag">stale card</span>}
         {repo.catalog?.verificationStatus === 'unverified' && <span className="tip-flag">unverified</span>}
       </div>
-      <strong className="tip-title">{displayName(repo.name)}</strong>
-      {line.upstream && (
+      <strong className="tip-title">{repoTitleOf(repo)}</strong>
+      {collectorSlug && <div className="tip-alias">Collected as {collectorSlug}</div>}
+      {line.upstream && !upstream && (
         <div className="tip-upstream">
           {edition === 'reference' ? 'Copy of ' : 'Forked from '}
           <b>{line.upstream}</b>
@@ -97,6 +106,7 @@ function SpineTip() {
       )}
       {purpose && <p className="tip-purpose">{purpose}</p>}
       <div className="tip-foot">
+        <span className="tip-stars">{upstream ? 'Upstream stars' : 'Stars'}: {stars?.toLocaleString() ?? '—'}</span>
         <span className={`tip-status ${status.alive ? 'alive' : 'dormant'}`}>
           <i aria-hidden="true" />
           {status.text}

@@ -1,17 +1,14 @@
 import { languageOf } from './derive';
+import { starsOf } from './repoIdentity';
 import type { Repo } from './types';
+
+export { starCountOf, starsOf } from './repoIdentity';
 
 export interface RepoMetadataFilters {
   languageFilter: string;
   topicFilter: string;
   /** Inclusive UTC calendar day, or an empty string for any date. */
   updatedAfter: string;
-}
-
-/** Missing or malformed GitHub counts behave like unstarred repositories. */
-export function starsOf(repo: Repo): number {
-  const stars = repo.github?.stars;
-  return typeof stars === 'number' && Number.isFinite(stars) ? Math.max(0, Math.floor(stars)) : 0;
 }
 
 /** Prefer GitHub's last push, falling back to the local last commit when unavailable. */

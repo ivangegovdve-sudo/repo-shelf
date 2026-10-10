@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import type { Repo } from '../types';
-import { bookColor, displayName, hasGoldBand, hasRedTab, isStale, languageOf } from '../derive';
+import { bookColor, hasGoldBand, hasRedTab, isStale, languageOf, repoTitleOf } from '../derive';
+import { primaryRepoName, primaryRepoSlug, referenceUpstream } from '../repoIdentity';
+import { starCountOf } from '../repoFilters';
 import type { Theme } from '../themes';
 import { subCategory } from '../taxonomy';
 
@@ -14,7 +16,7 @@ const detailCache = new Map<string, DetailEntry>();
 export const BOOK_TEXTURE_BUDGET = { spines: 8, details: 6 } as const;
 
 export function visualKey(r: Repo, staleDays: number): string {
-  return [r.name, languageOf(r), r.dirtyCount > 0, r.github?.stars ?? 0, r.virtual ? 'link' : isStale(r, staleDays), r.github?.description ?? '', r.visibility, r.archived, r.catalog?.kind, r.catalog?.subCategory, r.catalog?.upstream, r.catalog?.cardStale, r.catalog?.verificationStatus, r.catalog?.alive, r.lastCommitAt].join('|');
+  return [repoTitleOf(r), primaryRepoName(r), primaryRepoSlug(r), languageOf(r), r.dirtyCount > 0, starCountOf(r) ?? 'unknown-stars', r.virtual ? 'link' : isStale(r, staleDays), r.github?.description ?? '', r.summary, r.doc, r.visibility, r.archived, r.catalog?.kind, r.catalog?.subCategory, r.catalog?.upstream, r.catalog?.commitsAhead, r.catalog?.authoredCommitsAhead, r.catalog?.cardStale, r.catalog?.verificationStatus, r.catalog?.alive, r.lastCommitAt, r.commitCount, r.branch].join('|');
 }
 
 function desaturate(hex: string, amount = 0.55): string {
@@ -67,8 +69,22 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): st
     const test = cur ? `${cur} ${w}` : w;
     if (ctx.measureText(test).width > maxWidth && cur) {
       lines.push(cur);
-      cur = w;
-    } else cur = test;
+      cur = '';
+    }
+    if (ctx.measureText(w).width > maxWidth) {
+      // GitHub owner/repo identities have no spaces. Keep every character while
+      // breaking first at the slash, then at the available width if necessary.
+      let remaining = w;
+      while (ctx.measureText(remaining).width > maxWidth) {
+        let cut = remaining.length;
+        while (cut > 1 && ctx.measureText(remaining.slice(0, cut)).width > maxWidth) cut--;
+        const slash = remaining.lastIndexOf('/', cut - 1);
+        if (slash >= 0 && slash < cut - 1) cut = slash + 1;
+        lines.push(remaining.slice(0, cut));
+        remaining = remaining.slice(cut);
+      }
+      cur = remaining;
+    } else cur = cur ? `${cur} ${w}` : w;
   }
   if (cur) lines.push(cur);
   return lines;
@@ -121,7 +137,7 @@ function clothBackground(ctx: CanvasRenderingContext2D, width: number, height: n
 }
 
 function catalogMotif(ctx: CanvasRenderingContext2D, r: Repo, cx: number, cy: number, radius: number, accent: string): void {
-  const seed = seedOf(r.name);
+  const seed = seedOf(primaryRepoName(r));
   ctx.save();
   ctx.translate(cx, cy);
   ctx.rotate(((seed % 31) - 15) * Math.PI / 180);
@@ -185,7 +201,7 @@ function drawCatalogSpine(r: Repo): HTMLCanvasElement {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = reference ? colors.ink : '#f7f0df';
-  const title = displayName(r.name);
+  const title = repoTitleOf(r);
   const px = fitText(ctx, title, H - 190, 42, 18, BOOK_SERIF, 700);
   ctx.font = `700 ${px}px ${BOOK_SERIF}`;
   ctx.fillText(title, 0, -5);
@@ -243,7 +259,7 @@ function drawCatalogCover(r: Repo): HTMLCanvasElement {
 
   ctx.fillStyle = reference ? colors.ink : '#f7f0df';
   ctx.textBaseline = 'top';
-  const title = displayName(r.name);
+  const title = repoTitleOf(r);
   let px = 58;
   ctx.font = `700 ${px}px ${BOOK_SERIF}`;
   let lines = wrap(ctx, title, W - (reference ? 170 : 115));
@@ -253,7 +269,7 @@ function drawCatalogCover(r: Repo): HTMLCanvasElement {
     lines = wrap(ctx, title, W - (reference ? 170 : 115));
   }
   let y = reference ? 140 : 120;
-  for (const line of lines.slice(0, 3)) {
+  for (const line of lines) {
     ctx.fillText(line, W / 2, y);
     y += px * 1.02;
   }
@@ -293,6 +309,11 @@ function drawCatalogCover(r: Repo): HTMLCanvasElement {
     ctx.fillText(line, W / 2, summaryY);
     summaryY += 24;
   }
+
+  const stars = starCountOf(r);
+  ctx.font = `600 15px ${SANS}`;
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(stars === null ? 'GITHUB STARS UNAVAILABLE' : `★ ${stars.toLocaleString()} GITHUB STARS`, W / 2, 662);
 
   const status = `${meta.alive ? 'ACTIVE' : 'DORMANT'} · PUSH ${r.lastCommitAt?.slice(0, 10) ?? 'UNKNOWN'}`;
   ctx.fillStyle = reference ? colors.ink : '#f7f0df';
@@ -375,7 +396,7 @@ function drawSpine(r: Repo, staleDays: number): HTMLCanvasElement {
   ctx.shadowColor = 'rgba(0,0,0,0.35)';
   ctx.shadowBlur = 2;
   ctx.shadowOffsetY = 1;
-  const title = displayName(r.name);
+  const title = repoTitleOf(r);
   const px = fitText(ctx, title, H - 340, 80, 32, SERIF, 700);
   ctx.font = `700 ${px}px ${SERIF}`;
   ctx.fillText(title, 0, -8);
@@ -437,7 +458,7 @@ function drawCover(r: Repo, staleDays: number): HTMLCanvasElement {
 
   ctx.fillStyle = '#f6f4ee';
   ctx.textBaseline = 'top';
-  const title = displayName(r.name);
+  const title = repoTitleOf(r);
   let px = 90;
   ctx.font = `700 ${px}px ${SERIF}`;
   let lines = wrap(ctx, title, W - 210);
@@ -447,7 +468,7 @@ function drawCover(r: Repo, staleDays: number): HTMLCanvasElement {
     lines = wrap(ctx, title, W - 210);
   }
   let y = 255;
-  for (const line of lines.slice(0, 3)) {
+  for (const line of lines) {
     ctx.fillText(line, W / 2, y);
     y += px * 1.15;
   }
@@ -469,7 +490,8 @@ function drawCover(r: Repo, staleDays: number): HTMLCanvasElement {
   ctx.fillStyle = 'rgba(246,244,238,0.8)';
   const foot: string[] = [];
   if (r.commitCount) foot.push(`${r.commitCount} commits`);
-  if (r.github?.stars) foot.push(`★ ${r.github.stars.toLocaleString()}`);
+  const stars = starCountOf(r);
+  if (stars !== null) foot.push(`★ ${stars.toLocaleString()}`);
   if (r.dirtyCount) foot.push(`${r.dirtyCount} uncommitted`);
   if (r.virtual) foot.push('not cloned yet');
   const footText = foot.join('  ·  ');
@@ -506,7 +528,7 @@ function drawPage(r: Repo): HTMLCanvasElement {
   ctx.fillStyle = '#2a2622';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  const title = displayName(r.name);
+  const title = repoTitleOf(r);
   let px = 44;
   ctx.font = `700 ${px}px ${SERIF}`;
   let lines = wrap(ctx, title, W - 140);
@@ -516,13 +538,13 @@ function drawPage(r: Repo): HTMLCanvasElement {
     lines = wrap(ctx, title, W - 140);
   }
   let y = 90;
-  for (const line of lines.slice(0, 3)) {
+  for (const line of lines) {
     ctx.fillText(line, W / 2, y);
     y += px * 1.15;
   }
   ctx.font = `500 16px ${SANS}`;
   ctx.fillStyle = '#7a7268';
-  ctx.fillText((r.repoSlug ?? r.name).toUpperCase(), W / 2, y + 6);
+  ctx.fillText(primaryRepoSlug(r) ?? r.name, W / 2, y + 6, W - 112);
   y += 44;
   const desc = r.github?.description ?? r.summary ?? '';
   if (desc) {
@@ -538,17 +560,20 @@ function drawPage(r: Repo): HTMLCanvasElement {
   const facts: string[] = [];
   if (r.commitCount) facts.push(`${r.commitCount} commits`);
   if (r.branch) facts.push(`branch ${r.branch}`);
-  if (r.github?.stars) facts.push(`${r.github.stars.toLocaleString()} stars`);
+  const stars = starCountOf(r);
+  if (stars !== null) facts.push(`${stars.toLocaleString()} stars`);
+  else if (referenceUpstream(r)) facts.push('stars unavailable');
   if (r.visibility) facts.push(r.visibility);
   ctx.fillText(facts.join('  ·  '), W / 2, H - 120);
   ctx.font = `400 14px ${SANS}`;
   if (r.catalog?.upstream) {
     ctx.fillStyle = '#9a4d40';
     ctx.font = `700 14px ${SANS}`;
-    ctx.fillText(`UPSTREAM SOURCE · ${r.catalog.upstream}`.toUpperCase(), W / 2, H - 88);
+    ctx.fillText(`UPSTREAM SOURCE · ${r.catalog.upstream}`, W / 2, H - 88, W - 112);
     ctx.fillStyle = '#7a7268';
     ctx.font = `400 13px ${SANS}`;
-    ctx.fillText(r.catalog.kind === 'reference-copy' ? 'Unchanged upstream project' : r.catalog.commitsAhead === null ? 'Comparison unavailable · upstream history has no common ancestor' : `${r.catalog.commitsAhead} commits ahead in Ivan's fork`, W / 2, H - 62);
+    const authoredCommits = r.catalog.authoredCommitsAhead !== undefined ? r.catalog.authoredCommitsAhead : r.catalog.commitsAhead;
+    ctx.fillText(referenceUpstream(r) ? 'Upstream project · no authored changes' : r.catalog.kind === 'unverified-fork' || authoredCommits === null ? 'Authorship could not be verified' : `${authoredCommits} authored commits in Ivan's fork`, W / 2, H - 62);
   } else {
     ctx.fillText(r.catalog ? "Original repository by Ivan Gegov" : 'README, commits, issues and pull requests are on the pages to the right', W / 2, H - 88);
   }

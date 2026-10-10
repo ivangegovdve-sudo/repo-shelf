@@ -7,6 +7,8 @@ import { staticData, staticState } from './static';
 import { matchesTaxonomy } from './taxonomy';
 import { matchesRepoMetadata, starsOf } from './repoFilters';
 import { refreshPublicMetadata } from './githubLive';
+import { preserveNewerUpstreamCounts, refreshUpstreamStars } from './upstreamLive';
+import { referenceUpstream } from './repoIdentity';
 
 export type DialogKind = 'move' | 'rename' | 'mkdir' | 'shelves' | 'clone' | 'visibility' | 'delete' | 'create' | 'publish';
 
@@ -222,9 +224,10 @@ export const useShelf = create<ShelfState>()((set, get) => ({
     if (embedded) {
       get().applyState(staticState(embedded));
       set({ loaded: true, loadError: null, connected: true, pages: embedded.pages, readOnly: true });
-      publicRefresh ??= refreshPublicMetadata(embedded.repos, embedded.owner);
+      publicRefresh ??= refreshPublicMetadata(embedded.repos, embedded.owner)
+        .then((repos) => embedded.owner ? refreshUpstreamStars(repos) : repos);
       void publicRefresh.then((repos) => {
-        if (repos !== embedded.repos) get().applyState(staticState({ ...embedded, repos }));
+        if (repos !== embedded.repos) get().applyState(staticState({ ...embedded, repos: preserveNewerUpstreamCounts(repos, get().repos) }));
       });
       return;
     }
@@ -263,7 +266,18 @@ export const useShelf = create<ShelfState>()((set, get) => ({
     query: '', filter: 'all', activeShelfId: 'all', categoryFilters: [], subCategoryFilters: [],
     languageFilter: 'all', topicFilter: 'all', updatedAfter: '', minStars: 0,
   })),
-  select: (selectedRepoId) => set((st) => ({ selectedRepoId, focusedRepoId: selectedRepoId ?? st.focusedRepoId })),
+  select: (selectedRepoId) => {
+    set((st) => ({ selectedRepoId, focusedRepoId: selectedRepoId ?? st.focusedRepoId }));
+    const repo = get().repos.find((item) => item.id === selectedRepoId);
+    if (!repo || !staticData()?.owner || !referenceUpstream(repo)) return;
+    void refreshUpstreamStars([repo], 1).then(([updated]) => {
+      const current = get().repos.find((item) => item.id === repo.id);
+      if (updated !== repo && current?.github && updated.github?.upstream
+        && referenceUpstream(current) === referenceUpstream(updated)) {
+        get().mergeRepo({ ...current, github: { ...current.github, upstream: updated.github.upstream } });
+      }
+    });
+  },
   hover: (hoveredRepoId) => set({ hoveredRepoId }),
   setFocused: (focusedRepoId) => set({ focusedRepoId }),
 

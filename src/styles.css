@@ -518,7 +518,9 @@ code {
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
 }
+.tip-alias, .panel-alias { font-family: var(--mono); font-size: 10px; color: var(--muted); overflow-wrap: anywhere; }
 .tip-upstream {
   font-size: 12px;
   color: var(--ink);
@@ -1972,6 +1974,7 @@ a.status {
 }
 .book-window .panel-title {
   font-size: 25px;
+  overflow-wrap: anywhere;
 }
 .book-window .panel-slug {
   margin-top: -3px;

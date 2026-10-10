@@ -22,6 +22,22 @@ const data = {
   generatedAt: '2026-10-10T00:00:00Z', sourceUrl: 'https://example.com', pages: {},
 };
 
+const forkBooks: CatalogRepo[] = [
+  { ...books[0], name: 'a-renamed-alias', full_name: 'library-e2e/a-renamed-alias', fork: true, upstream: 'source-owner/original-project', commits_ahead: 0, stars: 0 },
+  { ...books[0], name: 'z-fork-alias', full_name: 'library-e2e/z-fork-alias', fork: true, upstream: 'source-owner/highest-project', commits_ahead: 0, stars: 5000 },
+  { ...books[0], name: 'adapted-project', full_name: 'library-e2e/adapted-project', fork: true, upstream: 'source-owner/adapted-source', commits_ahead: 4, stars: 200 },
+  { ...books[0], name: 'original-project', full_name: 'library-e2e/original-project', fork: false, upstream: null, commits_ahead: 0, stars: 1 },
+];
+const forkLibrary = catalogToState({ schema_version: 1, generated_at: data.generatedAt, source: 'e2e', repo_count: forkBooks.length, repos: forkBooks });
+const upstreamCounts: Record<string, number> = { 'a-renamed-alias': 1000, 'z-fork-alias': 2000, 'adapted-project': 90_000 };
+for (const repo of forkLibrary.repos) {
+  if (repo.github && repo.catalog?.upstream) {
+    repo.github.upstream = { fullName: repo.catalog.upstream, stars: upstreamCounts[repo.name], fetchedAt: data.generatedAt };
+  }
+}
+const forkData = { ...data, ...sanitizeForPublish(forkLibrary, null) };
+const forkIds = new Map(forkData.repos.map((repo) => [repo.name, repo.id]));
+
 async function loadLibrary(page: Page, fixture = data): Promise<void> {
   await page.addInitScript((embedded) => {
     (window as unknown as { __SHELF_STATIC: unknown }).__SHELF_STATIC = embedded;
@@ -233,6 +249,7 @@ test('the list loads more repositories on demand and resets its page after sorti
   const state = catalogToState({ schema_version: 1, generated_at: data.generatedAt, source: 'e2e', repo_count: entries.length, repos: entries });
   await loadLibrary(page, { ...data, ...sanitizeForPublish(state, null) });
   await page.getByRole('button', { name: 'List', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Sort by' }).selectOption('shelf');
   await expect(page.locator('.repo-list-row')).toHaveCount(60);
   await page.getByRole('button', { name: 'Show 5 more' }).click();
   await expect(page.locator('.repo-list-row')).toHaveCount(65);
@@ -353,4 +370,91 @@ test('playing rewind from List opens 3D and switching back stops the timeline', 
   await page.getByRole('button', { name: '3D Library', exact: true }).click();
   await expect(page.locator('.scene-wrap canvas')).toBeVisible();
   await expect(page.locator('.rewind')).toHaveCount(0);
+});
+
+test('unchanged renamed forks lead with upstream identity in the list, details and keyboard tooltip', async ({ page }) => {
+  await loadLibrary(page, forkData);
+  await page.getByRole('button', { name: 'List', exact: true }).click();
+  const aliasRow = page.locator(`.repo-list-row[data-repo-id="${forkIds.get('a-renamed-alias')}"]`);
+  await expect(aliasRow.locator('.repo-list-name')).toHaveText('source-owner/original-project');
+  await expect(aliasRow.locator('.repo-list-title')).not.toContainText('a-renamed-alias');
+  await expect(aliasRow).toHaveAttribute('aria-label', /^Open source-owner\/original-project details;/);
+  const adaptedRow = page.locator(`.repo-list-row[data-repo-id="${forkIds.get('adapted-project')}"]`);
+  await expect(adaptedRow.locator('.repo-list-name')).toHaveText('Adapted Project');
+  await expect(adaptedRow.locator('.repo-list-slug')).toHaveText('library-e2e/adapted-project');
+  await expect(page.locator(`.repo-list-row[data-repo-id="${forkIds.get('original-project')}"] .repo-list-name`)).toHaveText('Original Project');
+
+  await aliasRow.click();
+  const panel = page.getByRole('dialog');
+  await expect(panel.locator('.panel-title')).toHaveText('source-owner/original-project');
+  await expect(panel.locator('.panel-slug')).toHaveText('source-owner/original-project');
+  await expect(panel.locator('.panel-title')).not.toContainText('a-renamed-alias');
+  await expect(panel.locator('.attribution-upstream')).toHaveAttribute('href', 'https://github.com/source-owner/original-project');
+  await expect(panel.getByText('Upstream stars', { exact: true }).locator('..').locator('dd')).toHaveText('1,000');
+  await page.keyboard.press('Escape');
+  await expect(panel).toHaveCount(0);
+  await page.getByRole('button', { name: '3D Library', exact: true }).click();
+  await cullStats(page);
+  // Wall Enter opens the focused book when focus is outside interactive toolbar controls.
+  await page.getByRole('button', { name: '3D Library', exact: true }).evaluate((button) => (button as HTMLButtonElement).blur());
+  await page.keyboard.press('Home');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('.spine-tip .tip-title')).toHaveText('source-owner/highest-project');
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('.spine-tip .tip-title')).toHaveText('source-owner/original-project');
+  await expect(page.locator('.spine-tip .tip-stars')).toHaveText('Upstream stars: 1,000');
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog').locator('.panel-title')).toHaveText('source-owner/original-project');
+});
+
+test('list star ranking uses upstream counts for unchanged copies and own counts for authored projects', async ({ page }) => {
+  await loadLibrary(page, forkData);
+  await page.getByRole('button', { name: 'List', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Sort by' }).selectOption('stars');
+  await expect.poll(() => page.locator('.repo-list-row').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-repo-id')))).toEqual([
+    forkIds.get('z-fork-alias'), forkIds.get('a-renamed-alias'), forkIds.get('adapted-project'), forkIds.get('original-project'),
+  ]);
+  const higher = page.locator(`.repo-list-row[data-repo-id="${forkIds.get('z-fork-alias')}"]`);
+  await expect(higher.locator('.list-stars')).toHaveAttribute('aria-label', 'Upstream stars: 2,000');
+  await expect(higher.locator('.list-stars')).not.toContainText('5,000');
+  const lower = page.locator(`.repo-list-row[data-repo-id="${forkIds.get('a-renamed-alias')}"]`);
+  await expect(lower.locator('.list-stars')).toHaveAttribute('aria-label', 'Upstream stars: 1,000');
+  const adapted = page.locator(`.repo-list-row[data-repo-id="${forkIds.get('adapted-project')}"]`);
+  await expect(adapted.locator('.list-stars')).toHaveAttribute('aria-label', 'Stars: 200');
+  await expect(adapted.locator('.list-stars')).not.toContainText('90,000');
+});
+
+test('3D reference shelf order and reversible star tiers use source popularity without moving shelf slots', async ({ page }) => {
+  await loadLibrary(page, forkData);
+  await expect.poll(() => page.evaluate(() => {
+    const wall = (window as unknown as { __wall: { getState(): { layout: { spines: { repo: { name: string }; edition: string }[] } } } }).__wall;
+    return wall.getState().layout.spines.map((spine) => `${spine.edition}:${spine.repo.name}`);
+  })).toEqual(['original:original-project', 'adapted:adapted-project', 'reference:z-fork-alias', 'reference:a-renamed-alias']);
+  const positions = await layoutPositions(page);
+  const range = page.getByRole('slider', { name: 'Star threshold' });
+  await expect(range).toHaveAttribute('max', '4');
+  await range.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('.filter-result')).toHaveText('4 / 4 repos');
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(() => indexNames(page)).toEqual(['a-renamed-alias', 'adapted-project', 'z-fork-alias']);
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(() => indexNames(page)).toEqual(['a-renamed-alias', 'z-fork-alias']);
+  await page.keyboard.press('End');
+  await expect.poll(() => indexNames(page)).toEqual(['z-fork-alias']);
+  await expect(page.locator('#star-readout')).toContainText('2,000+');
+  await expect.poll(async () => {
+    const stats = await cullStats(page);
+    return [stats.threshold, stats.targetVisible, stats.visible, stats.animating];
+  }).toEqual([2000, 1, 1, 0]);
+  expect((await cullStats(page)).books.map((book) => book.stars).sort((a, b) => a - b)).toEqual([1, 200, 1000, 2000]);
+  expect(await layoutPositions(page)).toEqual(positions);
+  await page.keyboard.press('Home');
+  await expect.poll(() => indexNames(page)).toEqual(forkBooks.map((book) => book.name).sort());
+  await expect.poll(async () => {
+    const stats = await cullStats(page);
+    return [stats.targetVisible, stats.visible, stats.animating];
+  }).toEqual([4, 4, 0]);
+  expect(await layoutPositions(page)).toEqual(positions);
 });

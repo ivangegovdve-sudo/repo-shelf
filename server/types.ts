@@ -50,6 +50,8 @@ export interface GitHubMeta {
   pushedAt: string;
   htmlUrl: string;
   fetchedAt: string;
+  /** Public upstream popularity for unchanged reference copies; never substituted with fork stars. */
+  upstream?: { fullName: string; stars: number; fetchedAt: string };
 }
 
 export interface CatalogMeta {
@@ -58,6 +60,10 @@ export interface CatalogMeta {
   /** GitHub owner/name of the project this fork came from. */
   upstream: string | null;
   commitsAhead: number | null;
+  /** Verified commits authored by the collecting account, independent of raw upstream divergence. */
+  authoredCommitsAhead?: number | null;
+  /** Public authorship comparison time, independent of later star/metadata refreshes. */
+  authorshipVerifiedAt?: string;
   /** Ivan's repository URL; fork books primarily link to upstream instead. */
   repoUrl: string;
   /** Smaller purpose category, also the book's color identity. */

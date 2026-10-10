@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { parseCatalog, type CatalogRepo } from '../server/catalog.js';
+import { classifyForkAuthorship, fetchCompleteComparison } from './verify-fork-authorship.js';
 
 const OWNER = 'ivangegovdve-sudo';
 const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'repo-shelf-catalog-refresh',
@@ -60,23 +61,27 @@ async function main(): Promise<void> {
       const old = previous.get(r.full_name.toLowerCase());
       let upstream: string | null = null;
       let ahead: number | null = 0;
+      let authoredAhead: number | null = 0;
       if (r.fork) {
         const parent = parents.get(r.full_name)?.parent;
         upstream = parent?.nameWithOwner ?? old?.upstream ?? null;
         if (!upstream) throw new Error(`Cannot attribute upstream for ${r.name}. Catalog not written.`);
         try {
           if (!parent?.defaultBranchRef) throw new ComparisonUnavailable('Upstream default branch unavailable.');
-          const comparison = await github<{ ahead_by: number }>(`repos/${upstream}/compare/${parent.defaultBranchRef.target.oid}...${OWNER}:${encodeURIComponent(r.default_branch)}`);
+          const comparison = await fetchCompleteComparison(`repos/${upstream}/compare/${parent.defaultBranchRef.target.oid}...${OWNER}:${encodeURIComponent(r.default_branch)}`, github);
           ahead = comparison.ahead_by;
           if (!Number.isInteger(ahead) || ahead < 0) throw new Error(`Invalid fork comparison for ${r.name}.`);
+          authoredAhead = classifyForkAuthorship(comparison, OWNER).authoredCommitsAhead;
         } catch (error) {
           if (!(error instanceof ComparisonUnavailable)) throw error;
           ahead = null;
+          authoredAhead = null;
           console.log(`Comparison unavailable for ${r.name}; preserving upstream, no authorship claim.`);
         }
       }
       repos.push({
-        name: r.name, full_name: r.full_name, fork: r.fork, upstream, commits_ahead: ahead,
+        name: r.name, full_name: r.full_name, fork: r.fork, upstream, commits_ahead: ahead, authored_commits_ahead: authoredAhead,
+        authorship_verified_at: new Date().toISOString(),
         last_push: r.pushed_at, language: r.language ?? 'Unknown',
         topics: [...new Set([...(old?.topics ?? []), ...r.topics])],
         summary: old?.summary || r.description || `Source repository for ${r.name}.`,
@@ -90,11 +95,11 @@ async function main(): Promise<void> {
     }
   }));
   repos.sort((a, b) => a.full_name.localeCompare(b.full_name));
-  const document = { schema_version: 1, generated_at: now, source: 'Complete live GitHub public inventory + verified upstream default-branch comparisons + existing capability cards', repo_count: repos.length, repos };
+  const document = { schema_version: 1, generated_at: now, source: 'Complete live GitHub public inventory + default-branch comparisons with verified public author identities + existing capability cards', repo_count: repos.length, repos };
   parseCatalog(document);
   await fs.writeFile(`${file}.tmp`, `${JSON.stringify(document, null, 2)}\n`, 'utf8');
   await fs.rename(`${file}.tmp`, file);
-  console.log(`Wrote ${repos.length} public repositories (${repos.filter((r) => r.fork && r.commits_ahead === 0).length} unchanged forks).`);
+  console.log(`Wrote ${repos.length} public repositories (${repos.filter((r) => r.fork && r.authored_commits_ahead === 0).length} forks with no collector-authored changes).`);
 }
 
 void main().catch((error: unknown) => {

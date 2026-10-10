@@ -19,9 +19,26 @@ export async function readPublicLibrary(root: string): Promise<StaticShelfData> 
   return data;
 }
 
-/** Append newly catalogued public books while retaining every existing published book verbatim. */
-export function publicLibraryState(data: StaticShelfData, catalog?: AppState): AppState {
-  const repos = [...data.repos];
+/** Append new public books and apply newer authorship evidence without replacing published cards or star caches. */
+export function publicLibraryState(data: StaticShelfData, catalog?: AppState, catalogGeneratedAt?: string): AppState {
+  const catalogBooks = new Map(catalog?.repos.map(repo => [repo.id, repo]));
+  const repos = data.repos.map(repo => {
+    const fresh = catalogBooks.get(repo.id);
+    if (!fresh || !repo.catalog || !fresh.catalog) return repo;
+    const verifiedAt = fresh.catalog.authorshipVerifiedAt ?? catalogGeneratedAt;
+    const previousVerifiedAt = repo.catalog.authorshipVerifiedAt ?? data.generatedAt;
+    if (!verifiedAt || !(Date.parse(verifiedAt) > Date.parse(previousVerifiedAt))) return repo;
+    // Refresh authorship without replacing published cards, categories, or upstream star caches.
+    return {
+      ...repo, owner: fresh.owner, repoSlug: fresh.repoSlug, remoteUrl: fresh.remoteUrl, linkUrl: fresh.linkUrl,
+      catalog: { ...repo.catalog, kind: fresh.catalog.kind, upstream: fresh.catalog.upstream,
+        commitsAhead: fresh.catalog.commitsAhead, authoredCommitsAhead: fresh.catalog.authoredCommitsAhead,
+        authorshipVerifiedAt: verifiedAt,
+        repoUrl: fresh.catalog.repoUrl },
+      github: repo.github ? { ...repo.github, stars: fresh.github?.stars ?? repo.github.stars,
+        htmlUrl: fresh.github?.htmlUrl ?? repo.github.htmlUrl } : fresh.github,
+    };
+  });
   const ids = new Set(repos.map((repo) => repo.id));
   for (const repo of catalog?.repos ?? []) {
     if (ids.has(repo.id)) continue;

@@ -9,6 +9,10 @@ export interface CatalogRepo {
   fork: boolean;
   upstream: string | null;
   commits_ahead: number | null;
+  /** Verified collector-authored commits; raw divergence may contain only upstream work. */
+  authored_commits_ahead?: number | null;
+  /** Time the public authorship evidence was checked, independent of star hydration. */
+  authorship_verified_at?: string;
   last_push: string | null;
   language: string;
   topics: string[];
@@ -94,7 +98,8 @@ export function parseCatalog(value: unknown): CatalogDocument {
 export function catalogToState(value: unknown): AppState {
   const doc = parseCatalog(value);
   const repos = doc.repos.map<Repo>((item) => {
-    const kind = item.fork ? (item.commits_ahead === null ? 'unverified-fork' : item.commits_ahead === 0 ? 'reference-copy' : 'authored-fork') : 'original';
+    const authored = item.authored_commits_ahead !== undefined ? item.authored_commits_ahead : item.commits_ahead;
+    const kind = item.fork ? (authored === null ? 'unverified-fork' : authored === 0 ? 'reference-copy' : 'authored-fork') : 'original';
     const subId = assignPurpose(item);
     const shelfId = subCategory(subId).top;
     const upstreamUrl = item.upstream ? `https://github.com/${item.upstream}` : null;
@@ -112,6 +117,8 @@ export function catalogToState(value: unknown): AppState {
       },
       catalog: {
         kind, upstream: item.upstream, commitsAhead: item.commits_ahead, repoUrl, subCategory: subId,
+        ...(item.authored_commits_ahead !== undefined ? { authoredCommitsAhead: item.authored_commits_ahead } : {}),
+        authorshipVerifiedAt: item.authorship_verified_at ?? doc.generated_at,
         cardStale: item.stale, verificationStatus: item.verification_status,
         confidence: item.confidence, cardGeneratedAt: item.card_generated_at,
         alive: Boolean(item.last_push) && new Date(doc.generated_at).getTime() - new Date(item.last_push!).getTime() <= 365 * 24 * 60 * 60 * 1000,

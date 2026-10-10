@@ -14,6 +14,7 @@ import { RepoList } from './ui/RepoList';
 import { staticData } from './static';
 import { useShallow } from 'zustand/react/shallow';
 import { selectVisibleRepos } from './store';
+import { repoTitleOf } from './derive';
 
 export function App() {
   const loaded = useShelf((s) => s.loaded);
@@ -103,7 +104,7 @@ export function App() {
           {repos.map((r) => (
             <li key={r.id}>
               <button data-book={r.name} data-shelf={r.shelfId} data-subcategory={r.catalog?.subCategory} onClick={() => useShelf.getState().select(r.id)}>
-                {r.name}{r.catalog ? ` — ${r.catalog.kind}${r.catalog.upstream ? `, upstream ${r.catalog.upstream}` : ''}` : ''}
+                {repoTitleOf(r)}{r.catalog ? ` — ${r.catalog.kind}${r.catalog.upstream ? `, upstream ${r.catalog.upstream}` : ''}` : ''}
               </button>
             </li>
           ))}

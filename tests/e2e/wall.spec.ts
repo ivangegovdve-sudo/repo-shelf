@@ -120,7 +120,7 @@ test.describe('spine-out wall (published catalog)', () => {
     const ref = await spinePoint(page, 'echo-reference');
     await page.mouse.move(ref.x, ref.y);
     await expect(page.locator('.spine-tip .tip-edition')).toContainText('Upstream project');
-    await expect(page.locator('.spine-tip .tip-upstream')).toHaveText('Copy of upstream-org/echo-reference');
+    await expect(page.locator('.spine-tip .tip-title')).toHaveText('upstream-org/echo-reference');
     await expect(page.locator('.spine-tip')).toContainText('upstream authorship');
     const adapted = await spinePoint(page, 'echo-adapted');
     await page.mouse.move(adapted.x, adapted.y);
@@ -133,7 +133,7 @@ test.describe('spine-out wall (published catalog)', () => {
     test('keyboard focus still shows the upstream, while pointer tips stay hidden', async ({ page }) => {
       expect(await page.evaluate(() => matchMedia('(hover: none)').matches)).toBe(true);
       for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight');
-      await expect(page.locator('.spine-tip .tip-upstream')).toHaveText('Copy of upstream-org/echo-reference');
+      await expect(page.locator('.spine-tip .tip-title')).toHaveText('upstream-org/echo-reference');
       await expect(page.locator('.spine-tip')).toBeVisible();
       const adapted = await spinePoint(page, 'echo-adapted');
       await page.mouse.move(adapted.x, adapted.y);

@@ -31,6 +31,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build:pages
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: actions/upload-artifact@v4
         with:
           name: public-library

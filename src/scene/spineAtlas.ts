@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Repo } from '../types';
-import { displayName } from '../derive';
+import { repoTitleOf } from '../derive';
+import { starsOf } from '../repoFilters';
 import { spineStyle, type SpineStyle } from './spineStyle';
 import { visualKey } from './textures';
 
@@ -189,7 +190,7 @@ export function paintSpine(ctx: CanvasRenderingContext2D, repo: Repo, style: Spi
   }
 
   if (edition === 'plain' && !repo.doc) {
-    if ((repo.github?.stars ?? 0) > 0) {
+    if (starsOf(repo) > 0) {
       ctx.fillStyle = '#d9b545';
       ctx.fillRect(0, 14, w, 5);
       top = Math.max(top, 23);
@@ -217,7 +218,7 @@ export function paintSpine(ctx: CanvasRenderingContext2D, repo: Repo, style: Spi
   }
 
   // Title, reading top to bottom like an English-language spine.
-  const title = displayName(repo.name);
+  const title = repoTitleOf(repo);
   const weight = edition === 'reference' ? 600 : 700;
   const size = Math.min(15, Math.max(10.5, w * 0.58));
   const fit = fitTitle(ctx, title, bottom - top, size, Math.max(10, size * 0.84), weight);

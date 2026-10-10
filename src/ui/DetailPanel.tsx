@@ -2,7 +2,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useShelf, selectVisibleRepos } from '../store';
 import { api } from '../api';
-import { bookColor, displayName, editionOf, formatSize, isStale, languageOf, relativeTime } from '../derive';
+import { bookColor, editionOf, formatSize, isStale, languageOf, relativeTime, repoTitleOf } from '../derive';
+import { starCountOf } from '../repoFilters';
+import { primaryRepoSlug, referenceUpstream } from '../repoIdentity';
 import { BookPages, DocPages, type Chapter } from './BookPages';
 import { BookViewer } from './BookViewer';
 import { subCategory } from '../taxonomy';
@@ -28,6 +30,7 @@ function dateOf(iso: string | null): string {
 function Attribution({ repo }: { repo: Repo }) {
   const c = repo.catalog;
   if (!c) return null;
+  const authoredCommits = c.authoredCommitsAhead !== undefined ? c.authoredCommitsAhead : c.commitsAhead;
   if (c.kind === 'original') {
     return (
       <div className="attribution original">
@@ -39,15 +42,17 @@ function Attribution({ repo }: { repo: Repo }) {
   const upstreamUrl = `https://github.com/${c.upstream}`;
   return (
     <div className={`attribution ${c.kind}`}>
-      <strong>{c.kind === 'reference-copy' ? 'Reference copy of upstream work' : c.kind === 'unverified-fork' ? 'Fork of upstream · comparison unavailable' : 'Adapted from upstream'}</strong>
+      <strong>{c.kind === 'reference-copy' ? 'Reference copy of upstream work' : c.kind === 'unverified-fork' ? 'Fork of upstream · authorship unverified' : 'Adapted from upstream'}</strong>
       <a href={upstreamUrl} target="_blank" rel="noopener" className="attribution-upstream">
         {c.upstream} ↗
       </a>
       <small>
         {c.kind === 'reference-copy'
-          ? 'Unchanged upstream project. Authorship belongs to the upstream contributors.'
-          : c.kind === 'unverified-fork' ? 'Upstream history is unavailable or has no common ancestor. Contributions could not be verified.'
-          : `Ivan’s fork carries ${c.commitsAhead} ${c.commitsAhead === 1 ? 'commit' : 'commits'} of his own on top; the original work belongs upstream.`}
+          ? c.commitsAhead === 0
+            ? 'Unchanged upstream project. Authorship belongs to the upstream contributors.'
+            : 'No changes authored by the collecting account. Authorship belongs to the upstream contributors.'
+          : c.kind === 'unverified-fork' || authoredCommits === null ? 'Contributions could not be verified against public upstream history.'
+          : `Ivan’s fork carries ${authoredCommits} ${authoredCommits === 1 ? 'commit' : 'commits'} of his own on top; the original work belongs upstream.`}
       </small>
     </div>
   );
@@ -105,6 +110,9 @@ export function DetailPanel() {
   const stale = isStale(repo, staleDays);
   const edition = editionOf(repo);
   const c = repo.catalog;
+  const upstream = referenceUpstream(repo);
+  const collectorSlug = upstream && repo.repoSlug && repo.repoSlug.toLowerCase() !== upstream.toLowerCase() ? repo.repoSlug : null;
+  const stars = starCountOf(repo);
   // A published catalog carries no README pages; do not open an empty chapter book there.
   const showPages = !c || !readOnly || hasPages;
 
@@ -128,7 +136,7 @@ export function DetailPanel() {
   };
 
   return (
-    <aside ref={panel} className={`panel book-window ed-${edition}`} role="dialog" aria-modal="false" aria-label={`${displayName(repo.name)} details`}>
+    <aside ref={panel} className={`panel book-window ed-${edition}`} role="dialog" aria-modal="false" aria-label={`${repoTitleOf(repo)} details`}>
       <header className="bw-bar">
         <div className="panel-eyebrow">
           SHELF {String(shelfIndex + 1).padStart(2, '0')} · {shelf?.label}
@@ -163,8 +171,9 @@ export function DetailPanel() {
                 {edition === 'original' ? 'Original' : edition === 'adapted' ? 'Adapted fork' : 'Reference copy'}
               </div>
             )}
-            <h2 className="panel-title">{displayName(repo.name)}</h2>
-            <div className="panel-slug">{repo.doc ? docPathLabel(repo) : c?.kind === 'reference-copy' ? c.upstream : (repo.repoSlug ?? repo.name)}</div>
+            <h2 className="panel-title">{repoTitleOf(repo)}</h2>
+            <div className="panel-slug">{repo.doc ? docPathLabel(repo) : primaryRepoSlug(repo) ?? repo.name}</div>
+            {collectorSlug && <div className="panel-alias">Collected as {collectorSlug}</div>}
             <Attribution repo={repo} />
             <p className="panel-desc">
               {repo.github?.description ??
@@ -203,6 +212,10 @@ export function DetailPanel() {
             <div>
               <dt>Language</dt>
               <dd>{lang}</dd>
+            </div>
+            <div>
+              <dt>{upstream ? 'Upstream stars' : 'Stars'}</dt>
+              <dd title={upstream ? `GitHub stars for ${upstream}` : undefined}>{stars?.toLocaleString() ?? '—'}</dd>
             </div>
             <div>
               <dt>Last push</dt>
@@ -254,7 +267,7 @@ export function DetailPanel() {
           <dl className="facts">
             <div>
               <dt>Stars</dt>
-              <dd>{repo.github ? repo.github.stars.toLocaleString() : '—'}</dd>
+              <dd>{stars?.toLocaleString() ?? '—'}</dd>
             </div>
             <div>
               <dt>Last push</dt>
@@ -289,7 +302,7 @@ export function DetailPanel() {
             </div>
             <div>
               <dt>Stars</dt>
-              <dd>{repo.github ? repo.github.stars.toLocaleString() : '—'}</dd>
+              <dd>{stars?.toLocaleString() ?? '—'}</dd>
             </div>
             <div>
               <dt>Topics</dt>

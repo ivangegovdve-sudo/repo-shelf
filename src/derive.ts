@@ -1,4 +1,5 @@
 import type { Repo } from './types';
+import { primaryRepoSlug, referenceUpstream, starsOf } from './repoIdentity';
 
 export const MIN_HEIGHT = 1.6;
 export const MAX_HEIGHT = 3.4;
@@ -88,13 +89,18 @@ export function editionOf(r: Repo): Edition {
 
 const EDITION_RANK: Record<Edition, number> = { original: 0, adapted: 1, plain: 2, reference: 3 };
 
-/** Shelf order inside one category: Ivan's own work first, reference copies last, then by name. */
+/** Own work leads each category; reference projects follow by their upstream popularity. */
 export function compareOnShelf(a: Repo, b: Repo): number {
-  return EDITION_RANK[editionOf(a)] - EDITION_RANK[editionOf(b)] || a.name.localeCompare(b.name);
+  const editionOrder = EDITION_RANK[editionOf(a)] - EDITION_RANK[editionOf(b)];
+  if (editionOrder) return editionOrder;
+  if (editionOf(a) === 'reference') {
+    return starsOf(b) - starsOf(a) || (primaryRepoSlug(a) ?? a.name).localeCompare(primaryRepoSlug(b) ?? b.name);
+  }
+  return a.name.localeCompare(b.name);
 }
 
 export function hasGoldBand(r: Repo): boolean {
-  return (r.github?.stars ?? 0) > 0;
+  return starsOf(r) > 0;
 }
 
 export function hasRedTab(r: Repo): boolean {
@@ -230,6 +236,11 @@ export function displayName(name: string): string {
       return w.charAt(0).toUpperCase() + w.slice(1);
     })
     .join(' ');
+}
+
+/** Unchanged reference books carry the exact source identity; authored books keep their title. */
+export function repoTitleOf(repo: Repo): string {
+  return referenceUpstream(repo) ?? displayName(repo.name);
 }
 
 export function formatSize(kb: number): string {

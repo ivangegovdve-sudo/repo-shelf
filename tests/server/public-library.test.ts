@@ -15,6 +15,50 @@ function catalog(repos: Repo[], shelves = [shelf]): AppState {
 }
 
 describe('public library catalog additions', () => {
+  it('applies newer verified authorship while preserving published cards and source-star caches', () => {
+    const published = { ...existing, owner: 'upstream', repoSlug: 'upstream/original',
+      catalog: { ...existing.catalog!, kind: 'reference-copy', commitsAhead: 0 },
+      github: { stars: 0, upstream: { fullName: 'upstream/original', stars: 1000, fetchedAt: '2026-10-01T00:00:00Z' } } } as Repo;
+    const refreshed = { ...published, owner: 'collector', repoSlug: 'collector/original',
+      summary: 'New card must not replace published card',
+      catalog: { ...published.catalog!, kind: 'authored-fork', commitsAhead: 3, authoredCommitsAhead: 1 },
+      github: { ...published.github!, stars: 2, htmlUrl: 'https://github.com/collector/original' } } as Repo;
+    const state = publicLibraryState({ ...snapshot, repos: [published] }, catalog([refreshed]), '2026-10-02T00:00:00Z');
+    expect(state.repos[0]).toMatchObject({ owner: 'collector', repoSlug: 'collector/original', summary: 'Published summary',
+      catalog: { kind: 'authored-fork', commitsAhead: 3, authoredCommitsAhead: 1 },
+      github: { stars: 2, upstream: published.github!.upstream } });
+    expect(published.catalog!.kind).toBe('reference-copy');
+  });
+
+  it('does not regress current authorship with an older catalog generation', () => {
+    const replacement = { ...existing, catalog: { ...existing.catalog!, kind: 'authored-fork', commitsAhead: 5 } } as Repo;
+    const state = publicLibraryState(snapshot, catalog([replacement]), '2026-09-30T00:00:00Z');
+    expect(state.repos[0]).toBe(existing);
+  });
+
+  it('applies newer per-book authorship even when star hydration has a later snapshot timestamp', () => {
+    const published = { ...existing,
+      catalog: { ...existing.catalog!, kind: 'reference-copy', commitsAhead: 0, authorshipVerifiedAt: '2026-10-01T00:00:00Z' },
+      github: { stars: 0, upstream: { fullName: 'upstream/original', stars: 1000, fetchedAt: '2026-10-10T00:00:00Z' } },
+    } as Repo;
+    const refreshed = { ...published, owner: 'collector', repoSlug: 'collector/original',
+      catalog: { ...published.catalog!, kind: 'authored-fork', commitsAhead: 3, authoredCommitsAhead: 1,
+        authorshipVerifiedAt: '2026-10-05T00:00:00Z' },
+    } as Repo;
+    const state = publicLibraryState({ ...snapshot, generatedAt: '2026-10-10T00:00:00Z', repos: [published] }, catalog([refreshed]), '2026-10-05T00:00:00Z');
+    expect(state.repos[0].catalog).toMatchObject({ kind: 'authored-fork', authoredCommitsAhead: 1, authorshipVerifiedAt: '2026-10-05T00:00:00Z' });
+    expect(state.repos[0].github!.upstream).toEqual(published.github!.upstream);
+  });
+
+  it('does not overwrite newer per-book evidence merely because the catalog metadata generation is newer', () => {
+    const published = { ...existing, catalog: { ...existing.catalog!, kind: 'authored-fork', authoredCommitsAhead: 1,
+      authorshipVerifiedAt: '2026-10-05T00:00:00Z' } } as Repo;
+    const oldEvidence = { ...published, catalog: { ...published.catalog!, kind: 'reference-copy', authoredCommitsAhead: 0,
+      authorshipVerifiedAt: '2026-10-01T00:00:00Z' } } as Repo;
+    const state = publicLibraryState({ ...snapshot, repos: [published] }, catalog([oldEvidence]), '2026-10-10T00:00:00Z');
+    expect(state.repos[0]).toBe(published);
+  });
+
   it('keeps published books when the current public catalog omits them', () => {
     const state = publicLibraryState(snapshot, catalog([]));
     expect(state.repos).toEqual([existing]);
