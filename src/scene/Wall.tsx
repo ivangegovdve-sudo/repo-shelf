@@ -1,15 +1,15 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { isFiltering, useShelf, type ShelfState } from '../store';
-import { matches, notYetCreated } from '../derive';
-import { matchesTaxonomy } from '../taxonomy';
+import { isFiltering, selectFilterCandidates, useShelf, type ShelfState } from '../store';
+import { notYetCreated } from '../derive';
+import { starsOf } from '../repoFilters';
 import { themeById } from '../themes';
 import type { Repo } from '../types';
 import { backPanelTexture, bookTextures, sideColor, textureCacheStats, woodTexture } from './textures';
-import { WALL, bayAt, layoutWall, spineAt, stepSpine, wallMetrics, type WallLayout, type WallStep } from './wallLayout';
+import { WALL, bayAt, layoutWall, spineAt, wallMetrics, type WallLayout, type WallStep } from './wallLayout';
 import { buildStructure, shadeTexture } from './wallStructure';
-import { PULL, SpineField } from './spineField';
+import { PULL, SpineField, stepEligibleSpine } from './spineField';
 import { SPINE_FONT } from './spineAtlas';
 import { useWall, wallView, type ScreenRect } from './wallStore';
 import { wallPoint } from './WallCamera';
@@ -41,9 +41,9 @@ function dropTarget(repo: Repo, layout: WallLayout, x: number): string | null {
   return shelf.kind === 'disk' ? shelf.id : null;
 }
 
-function firstVisible(layout: WallLayout): number {
-  const i = layout.spines.findIndex((s) => s.x >= wallView.x0 + 8);
-  return i >= 0 ? i : 0;
+function firstVisible(layout: WallLayout, eligible: (id: string) => boolean): number {
+  const i = layout.spines.findIndex((s) => s.x >= wallView.x0 + 8 && eligible(s.repo.id));
+  return i >= 0 ? i : layout.spines.findIndex((s) => eligible(s.repo.id));
 }
 
 const tmp = new THREE.Vector3();
@@ -58,6 +58,10 @@ export function Wall() {
   const activeShelfId = useShelf((s) => s.activeShelfId);
   const categories = useShelf((s) => s.categoryFilters);
   const subs = useShelf((s) => s.subCategoryFilters);
+  const languageFilter = useShelf((s) => s.languageFilter);
+  const topicFilter = useShelf((s) => s.topicFilter);
+  const updatedAfter = useShelf((s) => s.updatedAfter);
+  const minStars = useShelf((s) => s.minStars);
   const staleAfterDays = useShelf((s) => s.staleAfterDays);
   const timeline = useShelf((s) => s.timeline);
   const theme = useShelf((s) => themeById(s.themeId));
@@ -66,12 +70,13 @@ export function Wall() {
   const selected = useShelf((s) => s.selectedRepoId);
   const dragId = useShelf((s) => s.drag?.repoId ?? null);
   const overShelfId = useShelf((s) => s.drag?.overShelfId ?? null);
-  const filtering = useShelf(isFiltering);
+  // Star scrubbing changes only instance visibility, never the shelf layout.
+  const filtering = useShelf((s) => isFiltering({ ...s, minStars: 0 }));
   const occludeRight = useWall((s) => s.occludeRight);
 
   const displayed = useMemo(
-    () => repos.filter((r) => matches(r, query, filter, activeShelfId, staleAfterDays) && matchesTaxonomy(r.shelfId, r.catalog?.subCategory, categories, subs)),
-    [repos, query, filter, activeShelfId, staleAfterDays, categories, subs],
+    () => selectFilterCandidates(useShelf.getState()),
+    [shelves, repos, query, filter, activeShelfId, staleAfterDays, categories, subs, languageFilter, topicFilter, updatedAfter],
   );
   const byShelf = useMemo(() => {
     const m = new Map<string, Repo[]>();
@@ -101,7 +106,7 @@ export function Wall() {
       return;
     }
     useWall.getState().setTarget({ x: 0 });
-  }, [query, filter, activeShelfId, categories, subs]);
+  }, [query, filter, activeShelfId, categories, subs, languageFilter, topicFilter, updatedAfter]);
 
   const caseStyle = useShelf((s) => s.caseStyle);
   const structure = useMemo(() => buildStructure(layout, caseStyle), [layout, caseStyle]);
@@ -123,6 +128,7 @@ export function Wall() {
     t.needsUpdate = true;
     return t;
   }, []);
+  useEffect(() => () => wood.dispose(), [wood]);
   const back = backPanelTexture(theme);
   // The room the bookcase stands in, seen only when zoomed out: a wall behind it and a floor under it. Unlit, so the colours are exact.
   const room = useMemo(() => {
@@ -135,26 +141,53 @@ export function Wall() {
   }, [theme]);
   const trimColor = useMemo(() => `#${new THREE.Color(theme.scene.plank).lerp(new THREE.Color('#f3e2c4'), 0.28).getHexString()}`, [theme]);
 
-  const field = useMemo(() => new SpineField(), []);
+  const field = useMemo(() => {
+    const next = new SpineField();
+    // Restoring the 3D view at an active threshold starts at its current result.
+    next.setStarThreshold(minStars, true);
+    return next;
+  }, []);
   useEffect(() => () => field.dispose(), [field]);
   useEffect(() => {
     // Measurement hook for the texture budget and draw-call numbers reported in PROGRESS.md.
-    (window as unknown as { __wallStats?: () => unknown }).__wallStats = () => ({
+    const debugWindow = window as unknown as { __wallStats?: () => unknown };
+    const stats = () => ({
       atlas: field.atlas.stats(),
       detail: textureCacheStats(),
       spines: layoutRef.current.spines.length,
+      culling: {
+        ...field.cullingStats(),
+        books: layoutRef.current.spines.map((s) => ({
+          id: s.repo.id,
+          stars: starsOf(s.repo),
+          visibility: field.visibilityOf(s.repo.id),
+          eligible: field.canInteract(s.repo.id),
+          x: s.x,
+          y: s.y,
+          pull: field.pullOf(s.repo.id),
+        })),
+      },
       unlettered: field.unlettered(wallView.x0, wallView.x1),
       view: [Math.round(wallView.x0), Math.round(wallView.x1)],
       drawCalls: gl.info.render.calls,
       triangles: gl.info.render.triangles,
       glTextures: gl.info.memory.textures,
     });
+    debugWindow.__wallStats = stats;
+    return () => {
+      if (debugWindow.__wallStats === stats) delete debugWindow.__wallStats;
+    };
   }, [field, gl]);
   useEffect(() => {
     field.staleDays = staleAfterDays;
     field.setLayout(layout);
     invalidate();
   }, [field, layout, staleAfterDays, invalidate]);
+
+  useEffect(() => {
+    field.setStarThreshold(minStars, useShelf.getState().instant || reducedMotion);
+    invalidate();
+  }, [field, minStars, invalidate]);
 
   // Letter spines only once the spine typeface is ready (or clearly not coming).
   const fontsReady = useRef(false);
@@ -212,21 +245,22 @@ export function Wall() {
   useEffect(() => {
     const id = selected ?? focused;
     const s = id ? layoutRef.current.spines.find((x) => x.repo.id === id) : null;
-    if (s) useWall.getState().reveal(s.x - 6, s.x + s.w + 6, s.y - WALL.PLANK, s.y + s.h + 30);
-  }, [selected, focused, occludeRight, layout]);
+    if (s && field.canInteract(s.repo.id)) useWall.getState().reveal(s.x - 6, s.x + s.w + 6, s.y - WALL.PLANK, s.y + s.h + 30);
+  }, [selected, focused, occludeRight, layout, field, minStars]);
 
   // Pointer: hover, click to open, drag the wood (or any catalog book) to pan with a fling, drag a folder book to move it.
   const ghost = useRef<THREE.Mesh>(null);
   useEffect(() => {
     const el = gl.domElement;
-    type Press = { x: number; y: number; lastX: number; lastY: number; lastT: number; vx: number; vy: number; spine: number; mode: 'none' | 'pan' | 'drag' };
+    type Press = { x: number; y: number; lastX: number; lastY: number; lastT: number; vx: number; vy: number; repoId: string | null; mode: 'none' | 'pan' | 'drag' };
     let press: Press | null = null;
     const pointers = new Map<number, { x: number; y: number }>();
     let pinch: { dist: number; zoom: number } | null = null;
 
     const pick = (e: { clientX: number; clientY: number }) => {
       const p = wallPoint(camera, el, e.clientX, e.clientY);
-      return p ? spineAt(layoutRef.current, p.x, p.y) : -1;
+      const i = p ? spineAt(layoutRef.current, p.x, p.y) : -1;
+      return i >= 0 && field.canInteract(layoutRef.current.spines[i].repo.id) ? i : -1;
     };
     const setHover = (id: string | null) => {
       const st = useShelf.getState();
@@ -243,7 +277,8 @@ export function Wall() {
       }
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       el.setPointerCapture?.(e.pointerId);
-      press = { x: e.clientX, y: e.clientY, lastX: e.clientX, lastY: e.clientY, lastT: performance.now(), vx: 0, vy: 0, spine: pick(e), mode: 'none' };
+      const spine = pick(e);
+      press = { x: e.clientX, y: e.clientY, lastX: e.clientX, lastY: e.clientY, lastT: performance.now(), vx: 0, vy: 0, repoId: spine >= 0 ? layoutRef.current.spines[spine].repo.id : null, mode: 'none' };
     };
 
     const move = (e: PointerEvent) => {
@@ -272,8 +307,9 @@ export function Wall() {
       }
       const dx = e.clientX - press.lastX;
       const dy = e.clientY - press.lastY;
+      const pressedRepoId = press.repoId;
       if (press.mode === 'none' && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 5) {
-        const repo = press.spine >= 0 ? L.spines[press.spine].repo : null;
+        const repo = pressedRepoId && field.canInteract(pressedRepoId) ? L.spines.find((s) => s.repo.id === pressedRepoId)?.repo : null;
         if (repo && movable(repo, st)) {
           press.mode = 'drag';
           st.startDrag(repo.id);
@@ -295,7 +331,7 @@ export function Wall() {
         press.vy = press.vy * 0.6 + (dy / dt) * 0.4;
       } else if (press.mode === 'drag') {
         const p = wallPoint(camera, el, e.clientX, e.clientY);
-        const s = press.spine >= 0 ? L.spines[press.spine] : null;
+        const s = pressedRepoId ? L.spines.find((s) => s.repo.id === pressedRepoId) : null;
         if (p && s && ghost.current) {
           ghost.current.visible = true;
           ghost.current.position.set(p.x, p.y, 60);
@@ -318,7 +354,10 @@ export function Wall() {
       el.releasePointerCapture?.(e.pointerId);
       const st = useShelf.getState();
       if (p.mode === 'none') {
-        if (p.spine >= 0) st.select(layoutRef.current.spines[p.spine].repo.id);
+        // Metadata can refresh or a filter can reflow the wall during a press.
+        // Resolve its original book, never another book that inherited its index.
+        const repo = p.repoId ? layoutRef.current.spines.find((s) => s.repo.id === p.repoId)?.repo : null;
+        if (repo && field.canInteract(repo.id)) st.select(repo.id);
       } else if (p.mode === 'pan') {
         // Fling: carry the release velocity; the camera's easing turns it into a glide.
         if (performance.now() - p.lastT < 90) {
@@ -365,7 +404,7 @@ export function Wall() {
       el.removeEventListener('dblclick', dbl);
       el.removeEventListener('contextmenu', ctx);
     };
-  }, [gl, camera, invalidate]);
+  }, [gl, camera, invalidate, field]);
 
   // Keyboard: arrows walk the wall, Enter opens, Esc closes, +/-/0 zoom.
   useEffect(() => {
@@ -382,7 +421,9 @@ export function Wall() {
         if (!L.spines.length) return;
         e.preventDefault();
         const cur = st.focusedRepoId ? L.spines.findIndex((s) => s.repo.id === st.focusedRepoId) : -1;
-        const next = cur >= 0 ? stepSpine(L, cur, step) : firstVisible(L);
+        const eligible = (id: string) => field.canInteract(id);
+        const next = cur >= 0 || step === 'home' || step === 'end' ? stepEligibleSpine(L, cur, step, eligible) : firstVisible(L, eligible);
+        if (next < 0) return;
         wallView.keyboard = true;
         st.hover(null);
         st.setFocused(L.spines[next].repo.id);
@@ -391,7 +432,7 @@ export function Wall() {
       }
       if (e.key === 'Enter' || e.key === ' ') {
         if (target?.closest?.('button, a, [role="button"]')) return;
-        if (st.focusedRepoId && st.selectedRepoId !== st.focusedRepoId) {
+        if (st.focusedRepoId && field.canInteract(st.focusedRepoId) && st.selectedRepoId !== st.focusedRepoId) {
           e.preventDefault();
           st.select(st.focusedRepoId);
         }
@@ -415,7 +456,7 @@ export function Wall() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [invalidate]);
+  }, [invalidate, field]);
 
   // The dragged book follows the pointer with its own large spine texture.
   const ghostMats = useMemo(() => {
@@ -446,7 +487,7 @@ export function Wall() {
       return [((tmp.x + 1) / 2) * size.width, ((1 - tmp.y) / 2) * size.height] as const;
     };
     const rectFor = (id: string | null): ScreenRect | null => {
-      if (!id) return null;
+      if (!id || !field.canInteract(id)) return null;
       const s = L.spines.find((x) => x.repo.id === id);
       if (!s) return null;
       const pull = field.pullOf(id);

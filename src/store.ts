@@ -5,6 +5,8 @@ import { compareOnShelf, matches, type Filter } from './derive';
 import { applyThemeCss, loadThemeId, saveThemeId, themeById } from './themes';
 import { staticData, staticState } from './static';
 import { matchesTaxonomy } from './taxonomy';
+import { matchesRepoMetadata, starsOf } from './repoFilters';
+import { refreshPublicMetadata } from './githubLive';
 
 export type DialogKind = 'move' | 'rename' | 'mkdir' | 'shelves' | 'clone' | 'visibility' | 'delete' | 'create' | 'publish';
 
@@ -23,6 +25,7 @@ export interface Toast {
 }
 
 export type CaseStyle = 'classic' | 'modern' | 'floating';
+export type ViewMode = '3d' | 'list';
 export const CASE_STYLES: { id: CaseStyle; name: string; description: string }[] = [
   { id: 'classic', name: 'Classic', description: 'Walnut case with crown, plinth and panelled back' },
   { id: 'modern', name: 'Modern', description: 'Painted case, flat back, no crown' },
@@ -54,8 +57,18 @@ export interface ShelfState {
   activeShelfId: string;
   categoryFilters: string[];
   subCategoryFilters: string[];
+  languageFilter: string;
+  topicFilter: string;
+  updatedAfter: string;
+  minStars: number;
+  viewMode: ViewMode;
   toggleCategory: (id: string) => void;
   toggleSubCategory: (id: string) => void;
+  setLanguageFilter: (language: string) => void;
+  setTopicFilter: (topic: string) => void;
+  setUpdatedAfter: (date: string) => void;
+  setMinStars: (stars: number) => void;
+  setViewMode: (view: ViewMode) => void;
   selectedRepoId: string | null;
   hoveredRepoId: string | null;
   /** Keyboard focus on the wall: arrows move it, Enter opens it. */
@@ -102,6 +115,8 @@ export interface ShelfState {
 }
 
 let toastSeq = 1;
+// React StrictMode boots twice in development; share the account inventory request.
+let publicRefresh: Promise<Repo[]> | null = null;
 
 function loadCaseStyle(): CaseStyle {
   try {
@@ -111,6 +126,37 @@ function loadCaseStyle(): CaseStyle {
     /* ignore */
   }
   return 'classic';
+}
+
+function loadViewMode(): ViewMode {
+  try {
+    if (localStorage.getItem('repo-shelf.view') === 'list') return 'list';
+  } catch {
+    /* ignore */
+  }
+  return '3d';
+}
+
+/** Preserve an open book while clearing pointers to books the current filters hide. */
+function reconcileVisible(st: ShelfState, patch: Partial<ShelfState>): Partial<ShelfState> {
+  const next = { ...st, ...patch };
+  const candidates = selectFilterCandidates(next);
+  const maxStars = candidates.reduce((max, repo) => Math.max(max, starsOf(repo)), 0);
+  // After another filter changes, use the next surviving tier so the slider and
+  // predicate agree. Rounding up preserves which books pass the previous threshold.
+  const boundedMin = Math.min(next.minStars, maxStars);
+  const nextTier = boundedMin === 0 ? 0 : candidates.reduce((tier, repo) => {
+    const stars = starsOf(repo);
+    return stars >= boundedMin ? Math.min(tier, stars) : tier;
+  }, maxStars);
+  const minStars = patch.minStars ?? nextTier;
+  const visible = new Set(candidates.filter((repo) => starsOf(repo) >= minStars).map((repo) => repo.id));
+  return {
+    ...patch,
+    minStars,
+    hoveredRepoId: st.hoveredRepoId && visible.has(st.hoveredRepoId) ? st.hoveredRepoId : null,
+    focusedRepoId: st.focusedRepoId && visible.has(st.focusedRepoId) ? st.focusedRepoId : null,
+  };
 }
 
 export const useShelf = create<ShelfState>()((set, get) => ({
@@ -131,8 +177,25 @@ export const useShelf = create<ShelfState>()((set, get) => ({
   activeShelfId: 'all',
   categoryFilters: [],
   subCategoryFilters: [],
-  toggleCategory: (id) => set((st) => ({ categoryFilters: st.categoryFilters.includes(id) ? st.categoryFilters.filter((x) => x !== id) : [...st.categoryFilters, id] })),
-  toggleSubCategory: (id) => set((st) => ({ subCategoryFilters: st.subCategoryFilters.includes(id) ? st.subCategoryFilters.filter((x) => x !== id) : [...st.subCategoryFilters, id] })),
+  languageFilter: 'all',
+  topicFilter: 'all',
+  updatedAfter: '',
+  minStars: 0,
+  viewMode: loadViewMode(),
+  toggleCategory: (id) => set((st) => reconcileVisible(st, { categoryFilters: st.categoryFilters.includes(id) ? st.categoryFilters.filter((x) => x !== id) : [...st.categoryFilters, id] })),
+  toggleSubCategory: (id) => set((st) => reconcileVisible(st, { subCategoryFilters: st.subCategoryFilters.includes(id) ? st.subCategoryFilters.filter((x) => x !== id) : [...st.subCategoryFilters, id] })),
+  setLanguageFilter: (languageFilter) => set((st) => reconcileVisible(st, { languageFilter })),
+  setTopicFilter: (topicFilter) => set((st) => reconcileVisible(st, { topicFilter })),
+  setUpdatedAfter: (updatedAfter) => set((st) => reconcileVisible(st, { updatedAfter })),
+  setMinStars: (stars) => set((st) => reconcileVisible(st, { minStars: Number.isFinite(stars) ? Math.max(0, Math.floor(stars)) : 0 })),
+  setViewMode(viewMode) {
+    try {
+      localStorage.setItem('repo-shelf.view', viewMode);
+    } catch {
+      /* ignore */
+    }
+    set({ viewMode, ...(viewMode === 'list' ? { rewindPlaying: false, timeline: null } : {}) });
+  },
   selectedRepoId: null,
   hoveredRepoId: null,
   focusedRepoId: null,
@@ -146,7 +209,10 @@ export const useShelf = create<ShelfState>()((set, get) => ({
   timeline: null,
   rewindPlaying: false,
   setTimeline: (timeline) => set({ timeline }),
-  startRewind: () => set({ rewindPlaying: true, selectedRepoId: null, timeline: 0 }),
+  startRewind: () => {
+    get().setViewMode('3d');
+    set({ rewindPlaying: true, selectedRepoId: null, timeline: 0 });
+  },
   readOnly: staticData() !== null,
   instant: false,
   setInstant: (instant) => set({ instant }),
@@ -156,6 +222,10 @@ export const useShelf = create<ShelfState>()((set, get) => ({
     if (embedded) {
       get().applyState(staticState(embedded));
       set({ loaded: true, loadError: null, connected: true, pages: embedded.pages, readOnly: true });
+      publicRefresh ??= refreshPublicMetadata(embedded.repos, embedded.owner);
+      void publicRefresh.then((repos) => {
+        if (repos !== embedded.repos) get().applyState(staticState({ ...embedded, repos }));
+      });
       return;
     }
     try {
@@ -171,7 +241,7 @@ export const useShelf = create<ShelfState>()((set, get) => ({
     const selected = get().selectedRepoId;
     if (!staticData()) set({ pages: {} });
     const visible = s.shelves.filter((sh) => !sh.hidden || get().secretRevealed);
-    set({
+    set((st) => reconcileVisible(st, {
       allShelves: s.shelves,
       shelves: visible,
       repos: s.repos,
@@ -179,17 +249,20 @@ export const useShelf = create<ShelfState>()((set, get) => ({
       githubLogin: s.github.login,
       staleAfterDays: s.config.staleAfterDays,
       selectedRepoId: selected && s.repos.some((r) => r.id === selected) ? selected : null,
-    });
+    }));
   },
 
   mergeRepo(r) {
-    set((st) => ({ repos: st.repos.map((x) => (x.id === r.id ? { ...x, ...r } : x)) }));
+    set((st) => reconcileVisible(st, { repos: st.repos.map((x) => (x.id === r.id ? { ...x, ...r } : x)) }));
   },
 
-  setQuery: (query) => set({ query }),
-  setFilter: (filter) => set({ filter }),
-  setActiveShelf: (activeShelfId) => set({ activeShelfId }),
-  clearFilters: () => set({ query: '', filter: 'all', activeShelfId: 'all', categoryFilters: [], subCategoryFilters: [] }),
+  setQuery: (query) => set((st) => reconcileVisible(st, { query })),
+  setFilter: (filter) => set((st) => reconcileVisible(st, { filter })),
+  setActiveShelf: (activeShelfId) => set((st) => reconcileVisible(st, { activeShelfId })),
+  clearFilters: () => set((st) => reconcileVisible(st, {
+    query: '', filter: 'all', activeShelfId: 'all', categoryFilters: [], subCategoryFilters: [],
+    languageFilter: 'all', topicFilter: 'all', updatedAfter: '', minStars: 0,
+  })),
   select: (selectedRepoId) => set((st) => ({ selectedRepoId, focusedRepoId: selectedRepoId ?? st.focusedRepoId })),
   hover: (hoveredRepoId) => set({ hoveredRepoId }),
   setFocused: (focusedRepoId) => set({ focusedRepoId }),
@@ -284,17 +357,24 @@ declare global {
 }
 if (typeof window !== 'undefined') window.__shelf = useShelf;
 
-/** Repos that pass the current search / filter / shelf, in shelf order. */
-export function selectVisibleRepos(st: ShelfState): Repo[] {
+/** Repos eligible for the slider, before the star threshold is applied, in shelf order. */
+export function selectFilterCandidates(st: ShelfState): Repo[] {
   const order = new Map(st.shelves.map((s, i) => [s.id, i]));
   return st.repos
+    .filter((r) => order.has(r.shelfId))
     .filter((r) => matches(r, st.query, st.filter, st.activeShelfId, st.staleAfterDays))
     .filter((r) => matchesTaxonomy(r.shelfId, r.catalog?.subCategory, st.categoryFilters, st.subCategoryFilters))
+    .filter((r) => matchesRepoMetadata(r, st))
     .sort((a, b) => (order.get(a.shelfId) ?? 0) - (order.get(b.shelfId) ?? 0) || compareOnShelf(a, b));
 }
 
+/** Shared by the wall and flat list so every filter has the same result in both views. */
+export function selectVisibleRepos(st: ShelfState): Repo[] {
+  return selectFilterCandidates(st).filter((repo) => starsOf(repo) >= st.minStars);
+}
+
 export function isFiltering(st: ShelfState): boolean {
-  return st.query.trim() !== '' || st.filter !== 'all' || st.activeShelfId !== 'all' || st.categoryFilters.length > 0 || st.subCategoryFilters.length > 0;
+  return st.query.trim() !== '' || st.filter !== 'all' || st.activeShelfId !== 'all' || st.categoryFilters.length > 0 || st.subCategoryFilters.length > 0 || st.languageFilter !== 'all' || st.topicFilter !== 'all' || st.updatedAfter !== '' || st.minStars > 0;
 }
 
 /** Boot: load state, subscribe to SSE. Returns cleanup. */

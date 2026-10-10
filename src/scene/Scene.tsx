@@ -11,7 +11,8 @@ function SceneDebug() {
   const invalidate = useThree((st) => st.invalidate);
   const { gl, scene, camera } = useThree();
   useEffect(() => {
-    (window as unknown as { __r3f?: unknown }).__r3f = {
+    const debugWindow = window as unknown as { __r3f?: unknown };
+    const debug = {
       gl,
       scene,
       camera,
@@ -21,6 +22,10 @@ function SceneDebug() {
         gl.render(scene, camera);
         return gl.domElement.toDataURL('image/png');
       },
+    };
+    debugWindow.__r3f = debug;
+    return () => {
+      if (debugWindow.__r3f === debug) delete debugWindow.__r3f;
     };
   }, [gl, scene, camera, advance, invalidate]);
   return null;

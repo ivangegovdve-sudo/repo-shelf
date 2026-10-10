@@ -7,6 +7,21 @@ import { bytesToDataUrl, downloadDataUrl, panGif, rewindGif, shelfiePng } from '
 
 type Job = { label: string; done: number; total: number } | null;
 
+/** A capture requested from List opens the real shelf and waits for its new canvas. */
+async function readyLibraryScene(): Promise<void> {
+  useShelf.getState().setViewMode('3d');
+  const started = performance.now();
+  await new Promise<void>((resolve, reject) => {
+    const ready = () => {
+      const h = (window as unknown as { __r3f?: { gl: { domElement: HTMLCanvasElement } } }).__r3f;
+      if (h?.gl.domElement.isConnected) requestAnimationFrame(() => resolve());
+      else if (performance.now() - started > 10_000) reject(new Error('The shelf could not start. Try opening 3D Library again.'));
+      else requestAnimationFrame(ready);
+    };
+    ready();
+  });
+}
+
 export function ShareMenu() {
   const [open, setOpen] = useState(false);
   const [job, setJob] = useState<Job>(null);
@@ -48,6 +63,7 @@ export function ShareMenu() {
     setOpen(false);
     setJob({ label, done: 0, total: 1 });
     try {
+      await readyLibraryScene();
       const { dataUrl, name } = await fn((done, total) => setJob({ label, done, total }));
       await finish(dataUrl, name);
     } catch (err) {

@@ -9,8 +9,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # One group per ref: a PR run can never cancel the main build or deploy, and main never cancels
 # an in-flight production deployment. Superseded PR runs are still cancelled.
@@ -33,22 +31,44 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build:pages
-      - uses: actions/configure-pages@v5
-        if: github.ref == 'refs/heads/main'
+      - uses: actions/upload-artifact@v4
         with:
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
-        with:
+          name: public-library
           path: dist-pages
+          include-hidden-files: true
 
   deploy:
     if: github.ref == 'refs/heads/main'
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: https://ivangegovdve-sudo.github.io/repo-shelf/
     runs-on: ubuntu-latest
     needs: build
+    permissions:
+      contents: write
+      pages: write
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      # Preserve the site's existing Pages source: gh-pages, root directory.
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: published
+      - uses: actions/download-artifact@v4
+        with:
+          name: public-library
+          path: dist-pages
+      - name: Publish the existing GitHub Pages branch
+        run: |
+          rsync -a --delete --exclude=.git dist-pages/ published/
+          git -C published config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C published config user.name "github-actions[bot]"
+          git -C published add --all
+          if ! git -C published diff --cached --quiet; then
+            git -C published commit -m "Publish library from $GITHUB_SHA"
+            git -C published push origin HEAD:gh-pages
+          fi
+      # GITHUB_TOKEN pushes do not trigger the legacy Pages build by themselves.
+      - name: Build the existing Pages site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds"

@@ -10,6 +10,7 @@ import { ViewControls } from './ui/ViewControls';
 import { RewindOverlay } from './ui/Rewind';
 import { WallOverlay } from './ui/WallOverlay';
 import { WallMap } from './ui/WallMap';
+import { RepoList } from './ui/RepoList';
 import { staticData } from './static';
 import { useShallow } from 'zustand/react/shallow';
 import { selectVisibleRepos } from './store';
@@ -21,11 +22,27 @@ export function App() {
   const repos = useShelf(useShallow(selectVisibleRepos));
   const busy = useShelf((s) => s.busy);
   const hasSelection = useShelf((s) => s.selectedRepoId !== null);
+  const viewMode = useShelf((s) => s.viewMode);
 
   useEffect(() => connectStore(), []);
   useEffect(() => {
     const d = staticData();
     if (d) document.title = d.title;
+  }, []);
+
+  // Keep closing a book available even while the 3D canvas is mounting after a view switch.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (e.key !== 'Escape' || e.defaultPrevented || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      const st = useShelf.getState();
+      if (st.dialog || !st.selectedRepoId) return;
+      e.preventDefault();
+      st.select(null);
+      e.stopImmediatePropagation();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   // Easter egg: typing "hermes" anywhere (outside inputs) reveals the hidden shelf.
@@ -47,7 +64,7 @@ export function App() {
     <div className={`app ${busy ? 'busy' : ''}`}>
       <Header />
       <Controls />
-      <main className={`stage ${hasSelection ? 'with-page' : ''}`}>
+      <main className={`stage view-${viewMode} ${hasSelection ? 'with-page' : ''}`}>
         {loadError ? (
           <div className="empty">
             <h2>Cannot reach the server</h2>
@@ -64,6 +81,8 @@ export function App() {
               Add a shelf
             </button>
           </div>
+        ) : viewMode === 'list' ? (
+          <RepoList />
         ) : (
           <div className="scene-wrap">
             <Scene />
@@ -71,6 +90,11 @@ export function App() {
             <WallMap />
             <ViewControls />
             <RewindOverlay />
+            {loaded && repos.length === 0 && <div className="scene-empty" role="status">
+              <h2>No matching repositories</h2>
+              <p>Try a broader selection or lower the star threshold.</p>
+              <button className="btn primary" onClick={() => useShelf.getState().clearFilters()}>Reset filters</button>
+            </div>}
           </div>
         )}
         <DetailPanel />

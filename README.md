@@ -19,6 +19,12 @@ Select several top categories or book colors to narrow the wall. Selections comb
 
 Inside each bay, originals and adapted forks come first. Hovering or keyboard-focusing a fork names upstream immediately. Clicking a spine folds the book out into a 3D cover with upstream attribution and a readable first page. See [catalog refresh instructions](data/README.md).
 
+The **3D Library / List** toggle switches between the bookcase and a flat repository list, with the same search, category, edition and metadata filters in both. The list opens the same book details and shows language, topics, last update and stars. Your view preference is remembered. Use **Primary language**, **Topic / tag** and **Updated since** together to narrow the collection, or **Clear filters** to restore it. **Hide filters** keeps search, the view toggle and the star slider visible while giving the shelves more room; **Show filters** restores every control without changing your selections.
+
+The **Star threshold** slider walks through the collection's distinct star counts. It starts at zero, removes the lowest-starred books first, and ends with every book tied for the highest count in the current filtered collection. The readout shows the threshold and remaining book count. Books fade and slide off their original shelf positions; moving back restores them, including during an animation. Reduced-motion preferences skip the movement. The wall remains instanced, uses the existing bounded texture atlas, and renders only on demand; List mode stops the wall renderer.
+
+The published site keeps its complete 1,280-book catalog as a fallback and refreshes public star counts, languages, topics and last-push dates through the GitHub API in the background. Public builds also append new entries from `catalog.public.json`, so `npm run catalog:refresh` continues to add books while preserving existing books and attribution. Star counts belong to the collecting account's repositories; reference-copy links and upstream attribution remain intact. An unavailable or rate-limited API leaves the embedded library usable. GitHub Pages still serves the root of the **gh-pages** branch at [the existing live address](https://ivangegovdve-sudo.github.io/repo-shelf/). The Pages workflow publishes to that same branch after tests and the static build pass.
+
 ![repo shelf](docs/media/screenshot-shelf.png)
 
 | The library door on your desktop | … swings open | … into the shelf |
@@ -186,7 +192,7 @@ Environment overrides: `SHELF_CONFIG` (config file path), `SHELF_CACHE` (cache d
 
 `SHELF_CATALOG` overrides the bundled public catalog path. `npm run catalog:refresh -- /path/to/repoindex/catalog.json` refreshes the checked-in public-only snapshot after intersecting it with GitHub's public repository inventory.
 
-The checked-in catalog and public builds intentionally contain only the 1,192 repositories visible through GitHub's public inventory. To browse the complete 1,256-entry repoindex on your own machine, build a separate local-only shelf from the full catalog:
+The capability-card catalog in `data/catalog.public.json` contains 1,280 public repositories. The Pages build uses `data/library.public.json` to retain all 1,280 books from the existing deployed library, appends new catalog entries, and refreshes their public metadata before publishing. To update that fallback snapshot explicitly, run `node --import tsx scripts/refresh-public-library.ts`; set `SHELF_SKIP_GITHUB_REFRESH=1` for a completely offline Pages build. To browse the complete repoindex on your own machine, build a separate local-only shelf from the full catalog:
 
 ```bash
 npm run build:library:local -- /path/to/repoindex/catalog.json
