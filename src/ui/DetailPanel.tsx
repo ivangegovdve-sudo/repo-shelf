@@ -3,7 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useShelf, selectVisibleRepos } from '../store';
 import { api } from '../api';
 import { bookColor, editionOf, formatSize, isStale, languageOf, relativeTime, repoTitleOf } from '../derive';
-import { starCountOf } from '../repoFilters';
+import { starCountOf, updatedAtOf } from '../repoFilters';
 import { primaryRepoSlug, referenceUpstream } from '../repoIdentity';
 import { BookPages, DocPages, type Chapter } from './BookPages';
 import { BookViewer } from './BookViewer';
@@ -39,15 +39,18 @@ function Attribution({ repo }: { repo: Repo }) {
       </div>
     );
   }
-  const upstreamUrl = `https://github.com/${c.upstream}`;
+  const hasUpstream = Boolean(c.upstream);
+  const upstreamUrl = hasUpstream ? `https://github.com/${c.upstream}` : null;
   return (
     <div className={`attribution ${c.kind}`}>
-      <strong>{c.kind === 'reference-copy' ? 'Reference copy of upstream work' : c.kind === 'unverified-fork' ? 'Fork of upstream · authorship unverified' : 'Adapted from upstream'}</strong>
-      <a href={upstreamUrl} target="_blank" rel="noopener" className="attribution-upstream">
+      <strong>{!hasUpstream ? 'Public fork · upstream unavailable' : c.kind === 'reference-copy' ? 'Reference copy of upstream work' : c.kind === 'unverified-fork' ? 'Fork of upstream · authorship unverified' : 'Adapted from upstream'}</strong>
+      {upstreamUrl && <a href={upstreamUrl} target="_blank" rel="noopener" className="attribution-upstream">
         {c.upstream} ↗
-      </a>
+      </a>}
       <small>
-        {c.kind === 'reference-copy'
+        {!hasUpstream
+          ? 'The public upstream is unavailable, so this book uses Ivan’s public fork.'
+          : c.kind === 'reference-copy'
           ? c.commitsAhead === 0
             ? 'Unchanged upstream project. Authorship belongs to the upstream contributors.'
             : 'No changes authored by the collecting account. Authorship belongs to the upstream contributors.'
@@ -111,8 +114,12 @@ export function DetailPanel() {
   const edition = editionOf(repo);
   const c = repo.catalog;
   const upstream = referenceUpstream(repo);
+  const primarySlug = primaryRepoSlug(repo);
+  const primaryUrl = primarySlug ? `https://github.com/${primarySlug}` : repo.linkUrl ?? c?.repoUrl;
   const collectorSlug = upstream && repo.repoSlug && repo.repoSlug.toLowerCase() !== upstream.toLowerCase() ? repo.repoSlug : null;
   const stars = starCountOf(repo);
+  const updated = updatedAtOf(repo);
+  const active = updated !== null && Date.now() - Date.parse(updated) <= 365 * 24 * 60 * 60 * 1000;
   // A published catalog carries no README pages; do not open an empty chapter book there.
   const showPages = !c || !readOnly || hasPages;
 
@@ -194,7 +201,7 @@ export function DetailPanel() {
               {lang}
             </span>
           )}
-          {c && <span className={`tag ${c.alive ? 'tag-alive' : 'tag-muted'}`}>{c.alive ? 'Alive' : 'Dormant'}</span>}
+          {c && <span className={`tag ${active ? 'tag-alive' : 'tag-muted'}`}>{updated === null ? 'Update unknown' : active ? 'Alive' : 'Dormant'}</span>}
           {c?.cardStale && <span className="tag tag-red">Stale card</span>}
           {c?.verificationStatus === 'unverified' && <span className="tag tag-red">Unverified card</span>}
           {!c && repo.virtual && <span className="tag tag-muted">{repo.doc ? 'Guide' : repo.repoSlug ? 'On GitHub' : 'Link'}</span>}
@@ -219,13 +226,13 @@ export function DetailPanel() {
             </div>
             <div>
               <dt>Last push</dt>
-              <dd title={repo.lastCommitAt ?? ''}>
-                {relativeTime(repo.lastCommitAt)} · {dateOf(repo.lastCommitAt)}
+              <dd title={updated ?? ''}>
+                {updated ? `${relativeTime(updated)} · ${dateOf(updated)}` : 'Unavailable'}
               </dd>
             </div>
             <div>
               <dt>Status</dt>
-              <dd>{c.alive ? 'Alive, pushed within a year' : 'Dormant for over a year'}</dd>
+              <dd>{updated === null ? 'Update date unavailable' : active ? 'Alive, pushed within a year' : 'Dormant for over a year'}</dd>
             </div>
             {c.kind !== 'reference-copy' && <div>
               <dt>Commits ahead</dt>
@@ -271,7 +278,7 @@ export function DetailPanel() {
             </div>
             <div>
               <dt>Last push</dt>
-              <dd title={repo.github?.pushedAt ?? ''}>{repo.github ? relativeTime(repo.github.pushedAt) : '—'}</dd>
+              <dd title={updated ?? ''}>{updated ? relativeTime(updated) : '—'}</dd>
             </div>
             <div>
               <dt>Owner</dt>
@@ -313,12 +320,12 @@ export function DetailPanel() {
 
         {c ? (
           <div className="btn-row">
-            <a className="btn primary" href={repo.linkUrl ?? c.repoUrl} target="_blank" rel="noopener">
-              {c.upstream ? 'View upstream source ↗' : 'View on GitHub ↗'}
+            <a className="btn primary" href={primaryUrl} target="_blank" rel="noopener">
+              {upstream ? 'View upstream source ↗' : 'View on GitHub ↗'}
             </a>
             {c.upstream && c.kind !== 'reference-copy' && (
-              <a className="btn" href={c.repoUrl} target="_blank" rel="noopener">
-                View Ivan’s fork ↗
+              <a className="btn" href={`https://github.com/${c.upstream}`} target="_blank" rel="noopener">
+                View upstream source ↗
               </a>
             )}
             {!readOnly && repo.remoteUrl && c.kind !== 'reference-copy' && (

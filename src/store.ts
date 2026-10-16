@@ -8,7 +8,7 @@ import { matchesTaxonomy } from './taxonomy';
 import { matchesRepoMetadata, starsOf } from './repoFilters';
 import { refreshPublicMetadata } from './githubLive';
 import { preserveNewerUpstreamCounts, refreshUpstreamStars } from './upstreamLive';
-import { referenceUpstream } from './repoIdentity';
+import { attributedUpstream } from './repoIdentity';
 
 export type DialogKind = 'move' | 'rename' | 'mkdir' | 'shelves' | 'clone' | 'visibility' | 'delete' | 'create' | 'publish';
 
@@ -269,12 +269,14 @@ export const useShelf = create<ShelfState>()((set, get) => ({
   select: (selectedRepoId) => {
     set((st) => ({ selectedRepoId, focusedRepoId: selectedRepoId ?? st.focusedRepoId }));
     const repo = get().repos.find((item) => item.id === selectedRepoId);
-    if (!repo || !staticData()?.owner || !referenceUpstream(repo)) return;
+    // Keep checking an attributed source even while its latest explicit status
+    // displays the public fork, so a revived upstream can recover its identity.
+    if (!repo || !staticData()?.owner || !attributedUpstream(repo)) return;
     void refreshUpstreamStars([repo], 1).then(([updated]) => {
       const current = get().repos.find((item) => item.id === repo.id);
       if (updated !== repo && current?.github && updated.github?.upstream
-        && referenceUpstream(current) === referenceUpstream(updated)) {
-        get().mergeRepo({ ...current, github: { ...current.github, upstream: updated.github.upstream } });
+        && attributedUpstream(current)?.toLowerCase() === attributedUpstream(updated)?.toLowerCase()) {
+        get().mergeRepo({ ...current, linkUrl: updated.linkUrl, github: { ...current.github, upstream: updated.github.upstream, htmlUrl: updated.github.htmlUrl } });
       }
     });
   },

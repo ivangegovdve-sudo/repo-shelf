@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { parseCatalog, type CatalogRepo } from '../server/catalog.js';
+import { isUnavailableComparisonResponse } from './github-response.js';
 import { classifyForkAuthorship, fetchCompleteComparison } from './verify-fork-authorship.js';
 
 const OWNER = 'ivangegovdve-sudo';
@@ -15,9 +16,11 @@ async function github<T>(endpoint: string, body?: unknown): Promise<T> {
       headers, ...(body ? { method: 'POST', body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(60_000),
     });
     if (response.ok) return await response.json() as T;
-    if (response.status === 404 && endpoint.includes('/compare/')) {
-      const error = await response.json() as { message?: string };
-      if (error.message?.includes('No common ancestor')) throw new ComparisonUnavailable('Upstream history has no common ancestor.');
+    if (endpoint.includes('/compare/') && [401, 403, 404, 409, 422].includes(response.status)
+      && isUnavailableComparisonResponse(response.status, response.headers, await response.text())) {
+      // A public fork can outlive an inaccessible, deleted, or unrelated parent.
+      // Without a complete comparison, do not infer that the collector made no changes.
+      throw new ComparisonUnavailable(`Comparison unavailable (${response.status}).`);
     }
     if (response.status < 500) throw new Error(`GitHub ${endpoint.split('?')[0]} failed (${response.status}). Catalog not written.`);
   }
@@ -29,7 +32,13 @@ interface InventoryRepo {
   language: string | null; topics: string[]; description: string | null; default_branch: string;
   archived: boolean; created_at: string; stargazers_count: number;
 }
-interface ForkInfo { parent: { nameWithOwner: string; defaultBranchRef: { target: { oid: string } } | null } | null }
+interface ForkInfo {
+  parent: {
+    isPrivate: boolean;
+    nameWithOwner: string;
+    defaultBranchRef: { target: { oid: string } } | null;
+  } | null;
+}
 
 async function main(): Promise<void> {
   const file = path.resolve(process.argv[2] ?? 'data/catalog.public.json');
@@ -38,7 +47,9 @@ async function main(): Promise<void> {
   const inventory: InventoryRepo[] = [];
   for (let page = 1; ; page++) {
     const rows = await github<InventoryRepo[]>(`users/${OWNER}/repos?per_page=100&page=${page}&type=owner&sort=full_name`);
-    inventory.push(...rows.filter((r) => !r.private));
+    // Fail closed: an absent or malformed privacy field must never make its way
+    // into the public catalog.
+    inventory.push(...rows.filter((r) => r.private === false));
     if (rows.length < 100) break;
   }
   if (!inventory.length) throw new Error('Empty public inventory. Catalog not written.');
@@ -47,7 +58,7 @@ async function main(): Promise<void> {
   const parents = new Map<string, ForkInfo>();
   for (let start = 0; start < forks.length; start += 40) {
     const batch = forks.slice(start, start + 40);
-    const query = `{${batch.map((r, i) => `r${i}:repository(owner:${JSON.stringify(OWNER)},name:${JSON.stringify(r.name)}){parent{nameWithOwner defaultBranchRef{target{oid}}}}`).join('\n')}}`;
+    const query = `{${batch.map((r, i) => `r${i}:repository(owner:${JSON.stringify(OWNER)},name:${JSON.stringify(r.name)}){parent{isPrivate nameWithOwner defaultBranchRef{target{oid}}}}`).join('\n')}}`;
     const result = await github<{ data: Record<string, ForkInfo>; errors?: unknown[] }>('graphql', { query });
     if (result.errors) throw new Error('Fork parent query incomplete. Catalog not written.');
     batch.forEach((r, i) => parents.set(r.full_name, result.data[`r${i}`]));
@@ -60,28 +71,51 @@ async function main(): Promise<void> {
       const r = inventory[next++];
       const old = previous.get(r.full_name.toLowerCase());
       let upstream: string | null = null;
+      let sourceUnavailable = false;
       let ahead: number | null = 0;
       let authoredAhead: number | null = 0;
+      let authorshipVerifiedAt = now;
       if (r.fork) {
         const parent = parents.get(r.full_name)?.parent;
-        upstream = parent?.nameWithOwner ?? old?.upstream ?? null;
-        if (!upstream) throw new Error(`Cannot attribute upstream for ${r.name}. Catalog not written.`);
-        try {
-          if (!parent?.defaultBranchRef) throw new ComparisonUnavailable('Upstream default branch unavailable.');
-          const comparison = await fetchCompleteComparison(`repos/${upstream}/compare/${parent.defaultBranchRef.target.oid}...${OWNER}:${encodeURIComponent(r.default_branch)}`, github);
-          ahead = comparison.ahead_by;
-          if (!Number.isInteger(ahead) || ahead < 0) throw new Error(`Invalid fork comparison for ${r.name}.`);
-          authoredAhead = classifyForkAuthorship(comparison, OWNER).authoredCommitsAhead;
-        } catch (error) {
-          if (!(error instanceof ComparisonUnavailable)) throw error;
+        if (!parent || parent.isPrivate !== false) {
+          // Do not let an authenticated parent lookup place a private or removed
+          // upstream identity in a public catalog. The collector's public fork is
+          // still useful, but it must present under its own name and statistics.
+          sourceUnavailable = true;
           ahead = null;
           authoredAhead = null;
-          console.log(`Comparison unavailable for ${r.name}; preserving upstream, no authorship claim.`);
+          console.log(`Public source unavailable for ${r.name}; using the collector fork without upstream attribution.`);
+        } else {
+          upstream = parent.nameWithOwner;
+          try {
+            if (!parent.defaultBranchRef) throw new ComparisonUnavailable('Upstream default branch unavailable.');
+            const comparison = await fetchCompleteComparison(`repos/${upstream}/compare/${parent.defaultBranchRef.target.oid}...${OWNER}:${encodeURIComponent(r.default_branch)}`, github);
+            ahead = comparison.ahead_by;
+            if (!Number.isInteger(ahead) || ahead < 0) throw new Error(`Invalid fork comparison for ${r.name}.`);
+            authoredAhead = classifyForkAuthorship(comparison, OWNER).authoredCommitsAhead;
+          } catch (error) {
+            if (!(error instanceof ComparisonUnavailable)) throw error;
+            // If this exact fork has not moved since the prior verified inventory,
+            // retain that evidence. A missing comparison endpoint cannot turn known
+            // upstream work into collector work (or vice versa). Newer and new forks
+            // remain explicitly unverified until GitHub can compare them.
+            if (old?.last_push === r.pushed_at && old.authored_commits_ahead !== undefined) {
+              ahead = old.commits_ahead;
+              authoredAhead = old.authored_commits_ahead;
+              authorshipVerifiedAt = old.authorship_verified_at ?? now;
+              console.log(`Comparison unavailable for ${r.name}; retained prior authorship evidence because the fork has not moved.`);
+            } else {
+              ahead = null;
+              authoredAhead = null;
+              console.log(`Comparison unavailable for ${r.name}; preserving upstream, no authorship claim.`);
+            }
+          }
         }
       }
       repos.push({
-        name: r.name, full_name: r.full_name, fork: r.fork, upstream, commits_ahead: ahead, authored_commits_ahead: authoredAhead,
-        authorship_verified_at: new Date().toISOString(),
+        name: r.name, full_name: r.full_name, fork: r.fork, source_unavailable: sourceUnavailable || undefined,
+        upstream, commits_ahead: ahead, authored_commits_ahead: authoredAhead,
+        authorship_verified_at: authorshipVerifiedAt,
         last_push: r.pushed_at, language: r.language ?? 'Unknown',
         topics: [...new Set([...(old?.topics ?? []), ...r.topics])],
         summary: old?.summary || r.description || `Source repository for ${r.name}.`,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { compareOnShelf, hasGoldBand, repoTitleOf } from '../src/derive';
-import { primaryRepoName, primaryRepoSlug, referenceUpstream } from '../src/repoIdentity';
+import { attributedUpstream, primaryRepoName, primaryRepoSlug, referenceUpstream, updatedAtOf } from '../src/repoIdentity';
 import { starCountOf, starsOf, starThresholds } from '../src/repoFilters';
 import type { Repo } from '../src/types';
 
@@ -79,11 +79,117 @@ describe('primary repository identity', () => {
     expect(starCountOf(collectorChanges)).toBe(9_000);
   });
 
+  it('requires confirmed collector authorship when its verification is explicitly unknown', () => {
+    const r = repo();
+    r.catalog!.authoredCommitsAhead = null;
+    expect(r.catalog!.commitsAhead).toBe(0);
+    expect(attributedUpstream(r)).toBeNull();
+    expect(referenceUpstream(r)).toBeNull();
+    expect(primaryRepoSlug(r)).toBe('collector/copy-renamed');
+    expect(repoTitleOf(r)).toBe('Copy Renamed');
+    expect(starCountOf(r)).toBe(9_000);
+
+    delete r.catalog!.authoredCommitsAhead;
+    expect(attributedUpstream(r)).toBe('RealOwner/Original_API.v2');
+    expect(referenceUpstream(r)).toBe('RealOwner/Original_API.v2');
+    expect(starCountOf(r)).toBe(300);
+  });
+
   it('allows local books without a GitHub slug to keep their title', () => {
     const r = repo({ github: null, catalog: undefined, repoSlug: null, name: 'local-ui-tools' });
     expect(primaryRepoSlug(r)).toBeNull();
     expect(primaryRepoName(r)).toBe('local-ui-tools');
     expect(repoTitleOf(r)).toBe('Local UI Tools');
+  });
+
+  it.each(['missing', 'archived'] as const)('uses own public identity for an explicitly %s source while keeping its attribution', status => {
+    const r = repo();
+    r.github!.fullName = 'collector/Renamed_Public_Fork';
+    r.github!.upstream = { ...r.github!.upstream!, status };
+    expect(referenceUpstream(r)).toBeNull();
+    expect(attributedUpstream(r)).toBe('RealOwner/Original_API.v2');
+    expect(primaryRepoSlug(r)).toBe('collector/Renamed_Public_Fork');
+    expect(primaryRepoName(r)).toBe('copy-renamed');
+    expect(repoTitleOf(r)).toBe('Copy Renamed');
+    expect(starCountOf(r)).toBe(9_000);
+    expect(r.id).toBe('collector/copy-renamed');
+    expect(r.repoSlug).toBe('collector/copy-renamed');
+    expect(r.name).toBe('copy-renamed');
+    expect(r.catalog!.upstream).toBe('RealOwner/Original_API.v2');
+  });
+
+  it('falls back through valid own public URL and stored slug when public fullName is absent', () => {
+    const r = repo();
+    r.github!.upstream = { ...r.github!.upstream!, status: 'missing' };
+    r.catalog!.repoUrl = 'https://github.com/collector/public-renamed';
+    expect(primaryRepoSlug(r)).toBe('collector/public-renamed');
+    r.catalog!.repoUrl = 'https://example.com/collector/not-github';
+    expect(primaryRepoSlug(r)).toBe('collector/copy-renamed');
+    r.github!.fullName = 'invalid/slash/identity';
+    expect(primaryRepoSlug(r)).toBe('collector/copy-renamed');
+  });
+
+  it('does not demote a reference because metadata belongs to another upstream', () => {
+    const r = repo();
+    r.github!.upstream = { ...r.github!.upstream!, fullName: 'other/project', status: 'missing' };
+    expect(referenceUpstream(r)).toBe('RealOwner/Original_API.v2');
+    expect(primaryRepoSlug(r)).toBe('RealOwner/Original_API.v2');
+    expect(starCountOf(r)).toBeNull();
+  });
+
+  it('keeps legacy and active sources primary even when a source count is temporarily unavailable', () => {
+    for (const status of [undefined, 'active'] as const) {
+      const r = repo();
+      r.github!.upstream = { fullName: 'RealOwner/Original_API.v2', status, fetchedAt: '2026-10-10T00:00:00Z' };
+      expect(referenceUpstream(r)).toBe('RealOwner/Original_API.v2');
+      expect(primaryRepoSlug(r)).toBe('RealOwner/Original_API.v2');
+      expect(starCountOf(r)).toBeNull();
+    }
+  });
+});
+
+describe('effective repository push date', () => {
+  it('uses the active source push date, independently of own fork and star update dates', () => {
+    const r = repo();
+    r.github!.upstream = { ...r.github!.upstream!, status: 'active',
+      pushedAt: '2026-09-17T12:00:00Z', updatedAt: '2026-10-15T12:00:00Z' };
+    r.github!.updatedAt = '2026-10-16T12:00:00Z';
+    expect(Date.parse(updatedAtOf(r)!)).toBe(Date.parse('2026-09-17T12:00:00Z'));
+  });
+
+  it('uses valid legacy source push metadata without requiring an explicit active status', () => {
+    const r = repo();
+    r.github!.upstream!.pushedAt = '2026-09-17T12:00:00Z';
+    expect(Date.parse(updatedAtOf(r)!)).toBe(Date.parse('2026-09-17T12:00:00Z'));
+  });
+
+  it.each(['missing', 'archived'] as const)('falls back to own push date for a %s upstream', status => {
+    const r = repo();
+    r.github!.upstream = { ...r.github!.upstream!, status,
+      pushedAt: '2026-10-15T12:00:00Z', updatedAt: '2026-10-16T12:00:00Z' };
+    expect(Date.parse(updatedAtOf(r)!)).toBe(Date.parse('2026-10-01T00:00:00Z'));
+  });
+
+  it('ignores malformed, mismatched and absent source push dates', () => {
+    for (const pushedAt of [undefined, null, '', 'invalid-date']) {
+      const r = repo();
+      r.github!.upstream = { ...r.github!.upstream!, status: 'active', pushedAt };
+      expect(Date.parse(updatedAtOf(r)!)).toBe(Date.parse('2026-10-01T00:00:00Z'));
+    }
+    const r = repo();
+    r.github!.upstream = { ...r.github!.upstream!, fullName: 'other/project', pushedAt: '2026-10-15T12:00:00Z' };
+    expect(Date.parse(updatedAtOf(r)!)).toBe(Date.parse('2026-10-01T00:00:00Z'));
+  });
+
+  it('uses local commit time when no valid push date exists, without substituting metadata updated_at', () => {
+    const r = repo();
+    r.github!.pushedAt = '';
+    r.github!.updatedAt = '2026-10-16T12:00:00Z';
+    r.github!.upstream = { ...r.github!.upstream!, updatedAt: '2026-10-15T12:00:00Z' };
+    r.lastCommitAt = '2026-08-01T00:00:00Z';
+    expect(Date.parse(updatedAtOf(r)!)).toBe(Date.parse('2026-08-01T00:00:00Z'));
+    r.lastCommitAt = null;
+    expect(updatedAtOf(r)).toBeNull();
   });
 });
 

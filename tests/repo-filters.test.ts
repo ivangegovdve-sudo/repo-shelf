@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { matchesRepoMetadata, starsOf, starThresholds, updatedAtOf } from '../src/repoFilters';
+import { compareLatestUpdated, matchesRepoMetadata, starsOf, starThresholds, updatedAtOf } from '../src/repoFilters';
 import { isFiltering, selectFilterCandidates, selectVisibleRepos, useShelf, type ShelfState } from '../src/store';
 import type { Repo, Shelf } from '../src/types';
 
@@ -28,6 +28,21 @@ function repo(id: string, over: Partial<Repo> = {}): Repo {
 
 function shelf(id: string, hidden = false): Shelf {
   return { id, label: id, path: null, kind: 'catalog', hidden, repoCount: 0 };
+}
+
+function reference(id: string): Repo {
+  const r = repo(id);
+  return {
+    ...r,
+    github: {
+      ...r.github!, pushedAt: '2026-01-01T12:00:00Z',
+      upstream: {
+        fullName: 'source/project', stars: 100, fetchedAt: '2026-10-16T00:00:00Z',
+        status: 'active', pushedAt: '2026-10-15T12:00:00Z',
+      },
+    },
+    catalog: { ...r.catalog!, kind: 'reference-copy', upstream: 'source/project', commitsAhead: 0, authoredCommitsAhead: 0 },
+  };
 }
 
 const initial = useShelf.getState();
@@ -80,6 +95,67 @@ describe('repository metadata filters', () => {
     expect(updatedAtOf({ ...r, github: null, lastCommitAt: 'invalid' })).toBeNull();
     expect(matchesRepoMetadata(r, { ...anyMetadata, updatedAfter: 'invalid' })).toBe(true);
     expect(matchesRepoMetadata(r, { ...anyMetadata, updatedAfter: '2026-02-30' })).toBe(true);
+  });
+
+  it('filters both views by the active source push rather than an old collected fork date', () => {
+    const source = reference('active-source');
+    expect(updatedAtOf(source)).toBe('2026-10-15T12:00:00.000Z');
+    const newerFork = { ...source, github: { ...source.github!, pushedAt: '2026-10-16T12:00:00Z' } };
+    expect(updatedAtOf(newerFork)).toBe('2026-10-15T12:00:00.000Z');
+    const st = state({ repos: [source, repo('own-repo')], updatedAfter: '2026-10-10' });
+    expect(selectFilterCandidates(st).map((r) => r.id)).toEqual(['active-source']);
+    expect(selectVisibleRepos(st).map((r) => r.id)).toEqual(['active-source']);
+    expect(matchesRepoMetadata(source, { ...anyMetadata, updatedAfter: '2026-10-16' })).toBe(false);
+  });
+
+  it('falls back to the own fork date for archived, missing, mismatched or undated sources', () => {
+    const r = reference('fallback-date');
+    for (const upstream of [
+      { ...r.github!.upstream!, status: 'archived' as const },
+      { ...r.github!.upstream!, status: 'missing' as const },
+      { ...r.github!.upstream!, fullName: 'unrelated/project' },
+      { ...r.github!.upstream!, pushedAt: undefined },
+      { ...r.github!.upstream!, pushedAt: 'invalid' },
+    ]) {
+      const fallback = { ...r, github: { ...r.github!, upstream } };
+      expect(updatedAtOf(fallback)).toBe('2026-01-01T12:00:00.000Z');
+      expect(matchesRepoMetadata(fallback, { ...anyMetadata, updatedAfter: '2026-10-10' })).toBe(false);
+    }
+    const localFallback = { ...r, github: { ...r.github!, pushedAt: 'invalid', upstream: undefined }, lastCommitAt: '2026-09-01T00:00:00Z' };
+    expect(updatedAtOf(localFallback)).toBe('2026-09-01T00:00:00.000Z');
+  });
+
+  it('keeps adapted and unverified forks on their own dates despite newer source activity', () => {
+    const r = reference('own-activity');
+    for (const kind of ['authored-fork', 'unverified-fork', 'original'] as const) {
+      const own = { ...r, catalog: { ...r.catalog!, kind } };
+      expect(updatedAtOf(own)).toBe('2026-01-01T12:00:00.000Z');
+    }
+  });
+});
+
+describe('latest updated arrangement', () => {
+  it('orders effective source and own activity newest first without modifying the input', () => {
+    const source = reference('source-book');
+    const latest = repo('own-latest', { github: { ...source.github!, upstream: undefined, pushedAt: '2026-10-16T00:00:00Z' } });
+    const older = repo('own-older');
+    const input = [older, source, latest];
+    expect([...input].sort(compareLatestUpdated).map((r) => r.id)).toEqual(['own-latest', 'source-book', 'own-older']);
+    expect(input.map((r) => r.id)).toEqual(['own-older', 'source-book', 'own-latest']);
+  });
+
+  it('puts unknown dates after every valid date, including the epoch and dates before 1970', () => {
+    const undated = repo('a-undated', { github: null });
+    const beforeEpoch = repo('z-before-epoch', { github: null, lastCommitAt: '1960-01-01T00:00:00Z' });
+    const epoch = repo('epoch', { github: null, lastCommitAt: '1970-01-01T00:00:00Z' });
+    expect([undated, beforeEpoch, epoch].sort(compareLatestUpdated).map((r) => r.id)).toEqual(['epoch', 'z-before-epoch', 'a-undated']);
+  });
+
+  it('breaks equal-date ties by effective project name then source identity', () => {
+    const base = reference('source-a');
+    const alpha = { ...base, name: 'z-collected-alias', catalog: { ...base.catalog!, upstream: 'z-source/alpha' }, github: { ...base.github!, upstream: { ...base.github!.upstream!, fullName: 'z-source/alpha' } } };
+    const zeta = { ...base, id: 'source-z', name: 'a-collected-alias', catalog: { ...base.catalog!, upstream: 'a-source/zeta' }, github: { ...base.github!, upstream: { ...base.github!.upstream!, fullName: 'a-source/zeta' } } };
+    expect([zeta, alpha].sort(compareLatestUpdated).map((r) => r.id)).toEqual(['source-a', 'source-z']);
   });
 });
 

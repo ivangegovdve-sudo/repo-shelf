@@ -82,7 +82,7 @@ function recess(id: string): number {
 }
 
 function spineMaterial(texture?: THREE.Texture): THREE.MeshLambertMaterial {
-  // Lambert, not PBR: cloth needs no specular, and 1,256 spines cover most of the screen.
+  // Lambert, not PBR: cloth needs no specular, and more than 1,300 spines cover most of the screen.
   const material = new THREE.MeshLambertMaterial({ map: texture ?? null });
   material.onBeforeCompile = (shader) => {
     // Opaque, screen-door fading keeps correct depth / draw ordering with thousands

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useShallow } from 'zustand/react/shallow';
 import { useShelf, selectVisibleRepos } from '../store';
 import { bookColor, languageOf, relativeTime, repoTitleOf } from '../derive';
-import { starCountOf, updatedAtOf } from '../repoFilters';
+import { compareLatestUpdated, starCountOf, updatedAtOf } from '../repoFilters';
 import { primaryRepoName, primaryRepoSlug, referenceUpstream } from '../repoIdentity';
 import { subCategory } from '../taxonomy';
 
@@ -21,10 +21,10 @@ export function RepoList() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const ordered = useMemo(() => {
     if (sort === 'shelf') return repos;
+    if (sort === 'updated') return [...repos].sort(compareLatestUpdated);
     return [...repos].sort((a, b) => {
       const nameOrder = primaryRepoName(a).localeCompare(primaryRepoName(b));
       if (sort === 'stars') return (starCountOf(b) ?? -1) - (starCountOf(a) ?? -1) || nameOrder;
-      if (sort === 'updated') return (Date.parse(updatedAtOf(b) ?? '') || 0) - (Date.parse(updatedAtOf(a) ?? '') || 0) || nameOrder;
       return nameOrder;
     });
   }, [repos, sort]);
@@ -50,7 +50,7 @@ export function RepoList() {
             }}>
               <option value="shelf">Shelf order</option>
               <option value="stars">Most stars</option>
-              <option value="updated">Recently updated</option>
+              <option value="updated">Latest updated</option>
               <option value="name">Name A–Z</option>
             </select>
           </label>
@@ -104,7 +104,7 @@ export function RepoList() {
                       </span>
                       <span className="repo-list-stats">
                         <span className="list-stars" aria-label={`${starsLabel}: ${starsText}`} title={`${starsLabel}${upstream ? ` for ${upstream}` : ''}: ${starsText}`}><span aria-hidden="true">☆</span>{stars?.toLocaleString() ?? '—'}</span>
-                        <span className="list-updated">Updated <time dateTime={updated ?? undefined} title={updated ? dateFormatter.format(new Date(updated)) : undefined}>{updated ? relativeTime(updated) : 'unknown'}</time></span>
+                        <span className="list-updated">Updated <time dateTime={updated ?? undefined} title={updated ? `${dateFormatter.format(new Date(updated))} (UTC) · latest known push` : 'Update date unavailable'}>{updated ? relativeTime(updated) : 'unknown'}</time></span>
                         <span className="list-open">Open book <span aria-hidden="true">↗</span></span>
                       </span>
                     </button>

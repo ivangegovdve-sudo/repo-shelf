@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
 import { BOOK_TEXTURE_BUDGET } from '../src/scene/textures';
 import { SPINE_ATLAS, SPINE_ATLAS_MAX_BYTES } from '../src/scene/spineAtlas';
 
 const MiB = 1024 * 1024;
 const mipFactor = 4 / 3;
+const publicBookCount = (JSON.parse(fs.readFileSync(new URL('../data/library.public.json', import.meta.url), 'utf8')) as { repos: unknown[] }).repos.length;
 
 describe('book texture budget', () => {
   it('keeps the worst-case cached texture estimate below 160 MiB', () => {
@@ -26,10 +28,10 @@ describe('book texture budget', () => {
     expect(referenceSpine * 12).toBeLessThan(512 * 768);
   });
 
-  it('can letter the whole 1,256-book library without recycling a page', () => {
+  it('can letter the complete published library without recycling a page', () => {
     // A typical reference spine is 18×150 CSS px; every slot also carries a swatch and a gutter.
     const slot = Math.round((SPINE_ATLAS.texH * 18) / 150) + SPINE_ATLAS.swatch + SPINE_ATLAS.gutter;
     const perPage = Math.min(SPINE_ATLAS.capacity, SPINE_ATLAS.rowsPerPage * Math.floor(SPINE_ATLAS.page / slot));
-    expect(perPage * SPINE_ATLAS.maxPages).toBeGreaterThanOrEqual(1256);
+    expect(perPage * SPINE_ATLAS.maxPages).toBeGreaterThanOrEqual(publicBookCount);
   });
 });

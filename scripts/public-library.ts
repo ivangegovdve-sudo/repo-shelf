@@ -12,7 +12,7 @@ export async function readPublicLibrary(root: string): Promise<StaticShelfData> 
   // Fail closed if this already-public source is accidentally replaced with a local/private export.
   // buildStaticSite still uses sanitizeForPublish as the sole publication sanitizer.
   if (data.repos.some((repo) => repo.path !== '' || repo.dirtyCount !== 0 || repo.error
-    || repo.visibility === 'private' || repo.github?.isPrivate)
+    || (repo.visibility != null && repo.visibility !== 'public') || repo.github?.isPrivate)
     || data.shelves.some((shelf) => shelf.path !== null || shelf.hidden)) {
     throw new Error('The public library source contains local or private data.');
   }
@@ -34,7 +34,7 @@ export function publicLibraryState(data: StaticShelfData, catalog?: AppState, ca
       catalog: { ...repo.catalog, kind: fresh.catalog.kind, upstream: fresh.catalog.upstream,
         commitsAhead: fresh.catalog.commitsAhead, authoredCommitsAhead: fresh.catalog.authoredCommitsAhead,
         authorshipVerifiedAt: verifiedAt,
-        repoUrl: fresh.catalog.repoUrl },
+        repoUrl: fresh.catalog.repoUrl, cardStale: fresh.catalog.cardStale, alive: fresh.catalog.alive },
       github: repo.github ? { ...repo.github, stars: fresh.github?.stars ?? repo.github.stars,
         htmlUrl: fresh.github?.htmlUrl ?? repo.github.htmlUrl } : fresh.github,
     };

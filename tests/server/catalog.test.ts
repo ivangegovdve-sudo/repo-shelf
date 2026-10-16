@@ -66,6 +66,17 @@ describe('catalogToState', () => {
     const state = catalogToState(catalog([item({ stale: true, confidence: 'low', verification_status: 'unverified' })]));
     expect(state.repos[0].catalog).toMatchObject({ cardStale: true, confidence: 'low', verificationStatus: 'unverified', alive: true });
     expect(() => parseCatalog({ ...catalog([item()]), repo_count: 2 })).toThrow(/declares 2/);
+    expect(() => parseCatalog({ ...catalog([item()]), repos: [{ ...item(), private: true }] })).toThrow(/non-public/);
+    expect(() => parseCatalog({ ...catalog([item()]), repos: [{ ...item(), visibility: 'private' }] })).toThrow(/non-public/);
+    expect(() => parseCatalog({ ...catalog([item()]), repos: [{ ...item(), github: { isPrivate: true } }] })).toThrow(/non-public/);
+  });
+
+  it('allows a public fork to stand alone only when its parent is explicitly unavailable', () => {
+    const unavailable = item({ name: 'orphaned', full_name: 'ivangegovdve-sudo/orphaned', fork: true, upstream: null, commits_ahead: null, source_unavailable: true });
+    expect(() => parseCatalog(catalog([unavailable]))).not.toThrow();
+    expect(() => parseCatalog(catalog([{ ...unavailable, source_unavailable: undefined }]))).toThrow(/public upstream attribution/);
+    const state = catalogToState(catalog([unavailable]));
+    expect(state.repos[0]).toMatchObject({ repoSlug: 'ivangegovdve-sudo/orphaned', linkUrl: 'https://github.com/ivangegovdve-sudo/orphaned', catalog: { kind: 'unverified-fork', upstream: null } });
   });
 });
 
@@ -76,7 +87,7 @@ describe('bundled public catalog', () => {
     const state = catalogToState(doc);
     expect(state.repos).toHaveLength(doc.repo_count);
     expect(state.repos.every((repo) => repo.virtual && repo.visibility === 'public' && repo.path === '')).toBe(true);
-    expect(doc.repos.filter((repo) => repo.fork).every((repo) => Boolean(repo.upstream))).toBe(true);
+    expect(doc.repos.filter((repo) => repo.fork).every((repo) => Boolean(repo.upstream) || repo.source_unavailable === true)).toBe(true);
     expect(state.repos.filter((repo) => repo.catalog?.kind === 'reference-copy').length).toBeGreaterThan(1_000);
     expect(state.repos.filter((repo) => repo.catalog?.kind === 'original').length).toBeGreaterThan(0);
     expect(state.repos.every((repo) => state.shelves.some((shelf) => shelf.id === repo.shelfId))).toBe(true);

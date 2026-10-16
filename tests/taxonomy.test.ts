@@ -53,7 +53,7 @@ describe('category and color library', () => {
     expect(matchesTaxonomy('creative', 'voice-audio', ['intelligence'], ['voice-audio'])).toBe(false);
   });
 
-  it('retains archived public catalog entries and publishes unchanged forks using only upstream identity', () => {
+  it('retains archived public catalog entries with upstream primary identity and a public collecting-fork fallback', () => {
     const library = state();
     library.repos[1].archived = true;
     const published = sanitizeForPublish(library, 'ivangegovdve-sudo');
@@ -61,6 +61,7 @@ describe('category and color library', () => {
     const reference = published.repos.find((r) => r.name === 'video')!;
     expect(reference.repoSlug).toBe('upstream/video');
     expect(reference.linkUrl).toBe('https://github.com/upstream/video');
-    expect(JSON.stringify(reference)).not.toContain('ivangegovdve-sudo');
+    expect(reference.github!.fullName).toBe('ivangegovdve-sudo/video');
+    expect(reference.catalog!.upstream).toBe('upstream/video');
   });
 });
