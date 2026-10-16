@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { AppState, Repo, RepoPages, Shelf } from './types.js';
 import { execRunner, type Runner } from './git.js';
 import { ActionError } from './actions.js';
+import { attributedUpstream, isRepoSlug, ownRepoSlug, referenceUpstream } from '../src/repoIdentity.js';
 
 /** The data a published (static, read-only) shelf ships with. No paths, no private repos, no dirty state. */
 export interface StaticShelfData {
@@ -19,7 +20,7 @@ export interface StaticShelfData {
 export const PROJECT_URL = 'https://github.com/ivangegovdve-sudo/repo-shelf';
 
 function isPublic(r: Repo): boolean {
-  if (r.visibility === 'private' || (r.archived && !r.catalog)) return false;
+  if ((r.visibility != null && r.visibility !== 'public') || r.github?.isPrivate || (r.archived && !r.catalog)) return false;
   if (r.virtual) return true; // link books and public GitHub books
   return r.visibility === 'public' && Boolean(r.repoSlug);
 }
@@ -30,24 +31,29 @@ export function sanitizeForPublish(state: AppState, owner: string | null): Pick<
   const repos = state.repos
     .filter((r) => !hidden.has(r.shelfId))
     .filter(isPublic)
-    .map<Repo>((r) => ({
-    ...r,
-    path: '',
-    dirtyCount: 0,
-    error: undefined,
-    linkUrl: r.linkUrl ?? (r.repoSlug ? `https://github.com/${r.repoSlug}` : null),
-    ...(r.catalog?.kind === 'reference-copy' && r.catalog.upstream ? {
-      owner: r.catalog.upstream.split('/')[0], repoSlug: r.catalog.upstream,
-      remoteUrl: `https://github.com/${r.catalog.upstream}.git`,
-      catalog: { ...r.catalog, repoUrl: `https://github.com/${r.catalog.upstream}` },
-      github: r.github ? { ...r.github, htmlUrl: `https://github.com/${r.catalog.upstream}` } : null,
-    } : {}),
-  }));
+    .map<Repo>((r) => {
+      const source = attributedUpstream(r);
+      // Older published snapshots rewrote the visible slug to upstream. The public account and
+      // unchanged raw repository name recover the collecting fork without changing book IDs.
+      const inferredOwn = source && owner && isRepoSlug(`${owner}/${r.name}`) ? `${owner}/${r.name}` : null;
+      const own = ownRepoSlug(r) ?? inferredOwn;
+      const github = r.github ? { ...r.github, ...(own ? { fullName: own } : {}) } : null;
+      const effective = source ? referenceUpstream({ ...r, github }) ?? own : null;
+      return {
+        ...r, github, path: '', dirtyCount: 0, error: undefined,
+        linkUrl: r.linkUrl ?? (r.repoSlug ? `https://github.com/${r.repoSlug}` : null),
+        ...(source && effective ? {
+          owner: effective.split('/')[0], repoSlug: effective,
+          linkUrl: `https://github.com/${effective}`, remoteUrl: `https://github.com/${effective}.git`,
+          catalog: { ...r.catalog!, repoUrl: `https://github.com/${own ?? effective}` },
+          github: github ? { ...github, htmlUrl: `https://github.com/${effective}` } : null,
+        } : {}),
+      };
+    });
   const keep = new Set(repos.map((r) => r.shelfId));
   const shelves = state.shelves
     .filter((s) => !s.hidden && keep.has(s.id))
     .map<Shelf>((s) => ({ ...s, path: null, repoCount: repos.filter((r) => r.shelfId === s.id).length }));
-  void owner;
   return { shelves, repos };
 }
 

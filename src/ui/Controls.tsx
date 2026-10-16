@@ -134,9 +134,10 @@ export function Controls() {
           <div className="metadata-filter date-filter">
             <label htmlFor="updated-filter">Updated since</label>
             <div className="date-input-wrap">
-              <input id="updated-filter" type="date" value={updatedAfter} onChange={(e) => setUpdatedAfter(e.target.value)} />
+              <input id="updated-filter" type="date" value={updatedAfter} onChange={(e) => setUpdatedAfter(e.target.value)} aria-describedby="updated-filter-help" title="Latest upstream push when available, otherwise the collected repository's last push. Includes the selected UTC day." />
               {updatedAfter && <button type="button" onClick={() => setUpdatedAfter('')} aria-label="Clear updated date" title="Any update date">×</button>}
             </div>
+            <span id="updated-filter-help" className="sr-only">Filters both views by the latest upstream push when available, otherwise the collected repository's last push. Includes the selected UTC day.</span>
           </div>
         </div>
 

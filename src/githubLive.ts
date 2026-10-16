@@ -1,4 +1,5 @@
 import type { GitHubMeta, Repo } from './types';
+import { applyPrimaryRepoLink } from './repoIdentity';
 
 const PAGE_SIZE = 100;
 const MAX_PAGES = 20;
@@ -9,10 +10,12 @@ const CACHE_PREFIX = 'repo-shelf:public-github:v1:';
 const OWNER_PATTERN = /^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i;
 
 interface PublicMetadata {
+  fullName?: string;
   stars?: number;
   language?: string | null;
   topics?: string[];
   pushedAt?: string;
+  updatedAt?: string;
 }
 
 function cachedInventory(owner: string): unknown[] | null {
@@ -36,9 +39,9 @@ function cacheInventory(owner: string, inventory: Map<string, PublicMetadata>): 
   try {
     if (typeof sessionStorage === 'undefined') return;
     const rows = [...inventory].map(([name, fresh]) => ({
-      name, full_name: `${owner}/${name}`, private: false,
+      name, full_name: fresh.fullName ?? `${owner}/${name}`, private: false,
       stargazers_count: fresh.stars, language: fresh.language,
-      topics: fresh.topics, pushed_at: fresh.pushedAt,
+      topics: fresh.topics, pushed_at: fresh.pushedAt, updated_at: fresh.updatedAt,
     }));
     sessionStorage.setItem(`${CACHE_PREFIX}${owner.toLowerCase()}`, JSON.stringify({ owner: owner.toLowerCase(), savedAt: Date.now(), rows }));
   } catch {
@@ -52,7 +55,7 @@ function metadata(value: unknown, owner: string): [string, PublicMetadata] | nul
   // Even if an authenticated proxy ever replaces the API, private rows never enrich public books.
   if (row.private !== false || typeof row.name !== 'string' || typeof row.full_name !== 'string'
     || row.full_name.toLowerCase() !== `${owner}/${row.name}`.toLowerCase()) return null;
-  const result: PublicMetadata = {};
+  const result: PublicMetadata = { fullName: row.full_name };
   if (typeof row.stargazers_count === 'number' && Number.isSafeInteger(row.stargazers_count) && row.stargazers_count >= 0) {
     result.stars = row.stargazers_count;
   }
@@ -64,6 +67,9 @@ function metadata(value: unknown, owner: string): [string, PublicMetadata] | nul
   }
   if (typeof row.pushed_at === 'string' && Number.isFinite(Date.parse(row.pushed_at))) {
     result.pushedAt = new Date(row.pushed_at).toISOString();
+  }
+  if (typeof row.updated_at === 'string' && Number.isFinite(Date.parse(row.updated_at))) {
+    result.updatedAt = new Date(row.updated_at).toISOString();
   }
   return [row.name.toLowerCase(), result];
 }
@@ -141,11 +147,11 @@ export async function refreshPublicMetadata(repos: Repo[], owner: string | null,
     };
     // Capability-card tags remain searchable alongside current GitHub topics.
     const topics = fresh.topics ? [...new Set([...previous.topics, ...fresh.topics])] : previous.topics;
-    return {
+    return applyPrimaryRepoLink({
       ...repo,
       lastCommitAt: fresh.pushedAt ?? repo.lastCommitAt,
       languageGuess: 'language' in fresh ? fresh.language ?? null : repo.languageGuess,
       github: { ...previous, ...fresh, topics, fetchedAt },
-    };
+    });
   });
 }

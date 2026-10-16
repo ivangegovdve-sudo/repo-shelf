@@ -1,5 +1,5 @@
 import type { Repo } from './types';
-import { referenceUpstream, starsOf } from './repoIdentity';
+import { applyPrimaryRepoLink, attributedUpstream, starsOf } from './repoIdentity';
 
 const TTL_MS = 10 * 60_000;
 const BUDGET_MS = 60 * 60_000;
@@ -15,8 +15,14 @@ function valid(value: unknown, source: string): value is Upstream {
   if (!value || typeof value !== 'object') return false;
   const row = value as Partial<Upstream>;
   return typeof row.fullName === 'string' && row.fullName.toLowerCase() === source.toLowerCase()
-    && typeof row.stars === 'number' && Number.isSafeInteger(row.stars) && row.stars >= 0
+    && (row.status === 'missing' || row.status === 'archived'
+      || (typeof row.stars === 'number' && Number.isSafeInteger(row.stars) && row.stars >= 0))
+    && (row.status === undefined || ['active', 'archived', 'missing'].includes(row.status))
     && typeof row.fetchedAt === 'string' && Number.isFinite(Date.parse(row.fetchedAt));
+}
+
+function date(value: unknown): string | null {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
 }
 
 function fresh(value: unknown, source: string): value is Upstream {
@@ -63,10 +69,29 @@ async function requestSource(source: string, signal?: AbortSignal): Promise<Upst
       const response = await fetch(`https://api.github.com/repos/${source.split('/').map(encodeURIComponent).join('/')}`, {
         headers: { Accept: 'application/vnd.github+json' }, credentials: 'omit', signal: controller.signal,
       });
-      if (!response.ok) return null;
-      const row = await response.json() as Record<string, unknown>;
-      if (row.private !== false) return null;
-      const result = { fullName: row.full_name, stars: row.stargazers_count, fetchedAt: new Date().toISOString() };
+      let result: Upstream;
+      const fetchedAt = new Date().toISOString();
+      if (response.status === 404 || response.status === 410) {
+        result = { fullName: source, status: 'missing', fetchedAt };
+      } else {
+        // Authorization/rate-limit/server failures are not evidence of source disappearance.
+        if (!response.ok) return null;
+        const row = await response.json() as Record<string, unknown>;
+        if (row.private === true) {
+          result = { fullName: source, status: 'missing', fetchedAt };
+        } else {
+          if (row.private !== false || typeof row.archived !== 'boolean'
+            || typeof row.full_name !== 'string' || row.full_name.toLowerCase() !== key) return null;
+          const stars = typeof row.stargazers_count === 'number' && Number.isSafeInteger(row.stargazers_count) && row.stargazers_count >= 0
+            ? row.stargazers_count : undefined;
+          if (stars === undefined && !row.archived) return null;
+          result = {
+            fullName: row.full_name, ...(stars !== undefined ? { stars } : {}),
+            status: row.archived ? 'archived' : 'active',
+            pushedAt: date(row.pushed_at), updatedAt: date(row.updated_at), fetchedAt,
+          };
+        }
+      }
       if (!valid(result, source) || controller.signal.aborted) return null;
       try { sessionStorage.setItem(`${CACHE_PREFIX}${key}`, JSON.stringify(result)); } catch { /* Storage is optional. */ }
       return result;
@@ -85,7 +110,7 @@ async function requestSource(source: string, signal?: AbortSignal): Promise<Upst
 export async function refreshUpstreamStars(repos: Repo[], maxRequests = 12, signal?: AbortSignal): Promise<Repo[]> {
   if (signal?.aborted) return repos;
   const sources = [...new Map([...repos].sort((a, b) => starsOf(b) - starsOf(a)).flatMap(repo => {
-    const source = referenceUpstream(repo);
+    const source = attributedUpstream(repo);
     return source && repo.github ? [[source.toLowerCase(), { source, repo }] as const] : [];
   })).values()];
   const updates = new Map<string, Upstream>();
@@ -106,9 +131,9 @@ export async function refreshUpstreamStars(repos: Repo[], maxRequests = 12, sign
   }));
   if (!updates.size) return repos;
   return repos.map(repo => {
-    const source = referenceUpstream(repo);
+    const source = attributedUpstream(repo);
     const update = source && updates.get(source.toLowerCase());
-    return update && repo.github ? { ...repo, github: { ...repo.github, upstream: update } } : repo;
+    return update && repo.github ? applyPrimaryRepoLink({ ...repo, github: { ...repo.github, upstream: update } }) : repo;
   });
 }
 
@@ -116,13 +141,13 @@ export async function refreshUpstreamStars(repos: Repo[], maxRequests = 12, sign
 export function preserveNewerUpstreamCounts(incoming: Repo[], current: Repo[]): Repo[] {
   const existing = new Map(current.map(repo => [repo.id, repo]));
   return incoming.map(repo => {
-    const source = referenceUpstream(repo);
+    const source = attributedUpstream(repo);
     const previous = existing.get(repo.id);
     const update = previous?.github?.upstream;
-    if (!source || !repo.github || !previous || referenceUpstream(previous) !== source || !valid(update, source)) return repo;
+    if (!source || !repo.github || !previous || attributedUpstream(previous)?.toLowerCase() !== source.toLowerCase() || !valid(update, source)) return repo;
     const replaced = repo.github.upstream;
     return !valid(replaced, source) || Date.parse(update.fetchedAt) > Date.parse(replaced.fetchedAt)
-      ? { ...repo, github: { ...repo.github, upstream: update } }
+      ? applyPrimaryRepoLink({ ...repo, github: { ...repo.github, upstream: update } })
       : repo;
   });
 }

@@ -41,6 +41,8 @@ export interface Shelf {
 }
 
 export interface GitHubMeta {
+  /** The collecting account's public repository, retained when a book is displayed as its upstream. */
+  fullName?: string;
   description: string | null;
   language: string | null;
   stars: number;
@@ -48,10 +50,18 @@ export interface GitHubMeta {
   isPrivate: boolean;
   isFork: boolean;
   pushedAt: string;
+  updatedAt?: string;
   htmlUrl: string;
   fetchedAt: string;
-  /** Public upstream popularity for unchanged reference copies; never substituted with fork stars. */
-  upstream?: { fullName: string; stars: number; fetchedAt: string };
+  /** Confirmed source availability; explicit missing/archived sources use the collecting fork instead. */
+  upstream?: {
+    fullName: string;
+    stars?: number;
+    fetchedAt: string;
+    status?: 'active' | 'archived' | 'missing';
+    pushedAt?: string | null;
+    updatedAt?: string | null;
+  };
 }
 
 export interface CatalogMeta {

@@ -7,6 +7,8 @@ export interface CatalogRepo {
   name: string;
   full_name: string;
   fork: boolean;
+  /** The parent is no longer publicly usable, so this public fork stands on its own. */
+  source_unavailable?: boolean;
   upstream: string | null;
   commits_ahead: number | null;
   /** Verified collector-authored commits; raw divergence may contain only upstream work. */
@@ -87,10 +89,20 @@ export function parseCatalog(value: unknown): CatalogDocument {
   const names = new Set<string>();
   for (const repo of doc.repos) {
     if (!repo?.name || !repo.full_name || !Array.isArray(repo.topics)) throw new Error('Catalog contains a malformed repository.');
+    // This file is only for public inventory. Refuse a catalog that carries an
+    // explicit non-public marker instead of silently relabelling it public below.
+    const raw = repo as unknown as Record<string, unknown>;
+    const github = raw.github;
+    if (raw.private === true || (raw.visibility !== undefined && raw.visibility !== 'public')
+      || (github && typeof github === 'object' && (github as Record<string, unknown>).isPrivate === true)) {
+      throw new Error(`Catalog contains a non-public repository: ${repo.full_name}`);
+    }
     const key = repo.full_name.toLowerCase();
     if (names.has(key)) throw new Error(`Duplicate repository: ${repo.full_name}`);
     names.add(key);
-    if (repo.fork && !repo.upstream) throw new Error(`Fork ${repo.full_name} has no upstream attribution.`);
+    if (repo.fork && !repo.upstream && repo.source_unavailable !== true) {
+      throw new Error(`Fork ${repo.full_name} has no public upstream attribution.`);
+    }
   }
   return doc;
 }

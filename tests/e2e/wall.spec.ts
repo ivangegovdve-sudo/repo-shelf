@@ -103,9 +103,18 @@ test.describe('spine-out wall (published catalog)', () => {
   test.beforeEach(async ({ page }) => {
     const repos = [catalogRepo('echo-original', false, 0), catalogRepo('echo-adapted', true, 5), catalogRepo('echo-reference', true, 0)];
     const state = catalogToState({ schema_version: 1, generated_at: '2026-09-25T00:00:00Z', source: 'e2e', repo_count: repos.length, repos });
+    for (const repo of state.repos) {
+      if (repo.github && repo.catalog?.upstream) {
+        repo.github.upstream = {
+          fullName: repo.catalog.upstream, stars: 0, status: 'active',
+          pushedAt: '2026-09-01T00:00:00Z', fetchedAt: '2026-09-25T00:00:00Z',
+        };
+      }
+    }
+    // Synthetic upstreams must not be reclassified by live GitHub lookups.
     await page.addInitScript((data) => {
       (window as unknown as { __SHELF_STATIC: unknown }).__SHELF_STATIC = data;
-    }, { owner: 'ivangegovdve-sudo', title: 'E2E library', generatedAt: '2026-09-25T00:00:00Z', sourceUrl: 'https://example.com', shelves: state.shelves, repos: state.repos, pages: {} });
+    }, { owner: null, title: 'E2E library', generatedAt: '2026-09-25T00:00:00Z', sourceUrl: 'https://example.com', shelves: state.shelves, repos: state.repos, pages: {} });
     await page.goto('/');
     await expect(page.locator('.plate').first()).toContainText('Creative & Media');
   });

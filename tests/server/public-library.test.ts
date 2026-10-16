@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { publicLibraryState } from '../../scripts/public-library.js';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { publicLibraryState, readPublicLibrary } from '../../scripts/public-library.js';
 import type { StaticShelfData } from '../../server/publish.js';
 import type { AppState, Repo, Shelf } from '../../server/types.js';
+import { makeTempRoot, rm } from './helpers';
 
 const shelf: Shelf = { id: 'existing', label: 'Existing shelf', path: null, kind: 'catalog', hidden: false, repoCount: 1 };
 const existing = { id: 'existing-book', name: 'existing', shelfId: shelf.id, summary: 'Published summary', catalog: { upstream: 'upstream/original' } } as Repo;
@@ -15,17 +18,31 @@ function catalog(repos: Repo[], shelves = [shelf]): AppState {
 }
 
 describe('public library catalog additions', () => {
+  it('rejects any explicitly non-public visibility in the checked-in snapshot', async () => {
+    const root = await makeTempRoot('repo-shelf-public-library-');
+    try {
+      await fs.mkdir(path.join(root, 'data'), { recursive: true });
+      await fs.writeFile(path.join(root, 'data', 'library.public.json'), JSON.stringify({
+        ...snapshot,
+        repos: [{ ...existing, path: '', dirtyCount: 0, error: undefined, visibility: 'internal' }],
+      }));
+      await expect(readPublicLibrary(root)).rejects.toThrow(/local or private/i);
+    } finally {
+      await rm(root);
+    }
+  });
+
   it('applies newer verified authorship while preserving published cards and source-star caches', () => {
     const published = { ...existing, owner: 'upstream', repoSlug: 'upstream/original',
       catalog: { ...existing.catalog!, kind: 'reference-copy', commitsAhead: 0 },
       github: { stars: 0, upstream: { fullName: 'upstream/original', stars: 1000, fetchedAt: '2026-10-01T00:00:00Z' } } } as Repo;
     const refreshed = { ...published, owner: 'collector', repoSlug: 'collector/original',
       summary: 'New card must not replace published card',
-      catalog: { ...published.catalog!, kind: 'authored-fork', commitsAhead: 3, authoredCommitsAhead: 1 },
+      catalog: { ...published.catalog!, kind: 'authored-fork', commitsAhead: 3, authoredCommitsAhead: 1, cardStale: true, alive: false },
       github: { ...published.github!, stars: 2, htmlUrl: 'https://github.com/collector/original' } } as Repo;
     const state = publicLibraryState({ ...snapshot, repos: [published] }, catalog([refreshed]), '2026-10-02T00:00:00Z');
     expect(state.repos[0]).toMatchObject({ owner: 'collector', repoSlug: 'collector/original', summary: 'Published summary',
-      catalog: { kind: 'authored-fork', commitsAhead: 3, authoredCommitsAhead: 1 },
+      catalog: { kind: 'authored-fork', commitsAhead: 3, authoredCommitsAhead: 1, cardStale: true, alive: false },
       github: { stars: 2, upstream: published.github!.upstream } });
     expect(published.catalog!.kind).toBe('reference-copy');
   });

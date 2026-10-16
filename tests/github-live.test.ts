@@ -59,6 +59,7 @@ describe('public GitHub metadata refresh', () => {
     expect(result).toHaveLength(1);
     const refreshed = result[0];
     expect(refreshed.github).toMatchObject({
+      fullName: 'collector/EXAMPLE',
       description: 'Curated capability card', stars: 12, language: 'TypeScript',
       topics: ['curated-topic', 'live-topic'], pushedAt: '2026-10-01T12:00:00.000Z',
       htmlUrl: original.github!.htmlUrl, isFork: true, isPrivate: false,
@@ -101,7 +102,22 @@ describe('public GitHub metadata refresh', () => {
     const result = await refreshPublicMetadata([book(), invalid], OWNER);
     expect(result[0].github).toMatchObject({ stars: 0, language: null, topics: ['curated-topic'] });
     expect(result[0].languageGuess).toBeNull();
-    expect(result[1]).toBe(invalid);
+    expect(result[1].github).toMatchObject({ ...invalid.github!, fullName: 'collector/invalid', fetchedAt: expect.any(String) });
+    expect({ ...result[1], github: invalid.github }).toEqual(invalid);
+  });
+
+  it('keeps refreshing the public fork while an upstream is missing, including its canonical fallback link', async () => {
+    const original = book();
+    original.github!.upstream = { fullName: 'upstream/example', status: 'missing', fetchedAt: '2026-10-01T00:00:00Z' };
+    mockPages([row('example', { stargazers_count: 7, pushed_at: '2026-10-15T12:00:00Z', updated_at: '2026-10-16T12:00:00Z' })]);
+    const [updated] = await refreshPublicMetadata([original], OWNER);
+    expect(updated.github).toMatchObject({ fullName: 'collector/example', stars: 7,
+      pushedAt: '2026-10-15T12:00:00.000Z', updatedAt: '2026-10-16T12:00:00.000Z', upstream: original.github!.upstream,
+      htmlUrl: 'https://github.com/collector/example' });
+    expect(updated.linkUrl).toBe('https://github.com/collector/example');
+    expect(updated.catalog).toEqual(original.catalog);
+    expect(updated.name).toBe(original.name);
+    expect(updated.id).toBe(original.id);
   });
 
   it.each([403, 429, 500])('preserves the snapshot when GitHub responds %i', async (status) => {

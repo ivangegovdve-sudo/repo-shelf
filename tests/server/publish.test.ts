@@ -50,6 +50,10 @@ const state: AppState = {
   repos: [
     repo({ id: 'pub', visibility: 'public', repoSlug: 'me/pub', remoteUrl: 'https://github.com/me/pub.git' }),
     repo({ id: 'priv', visibility: 'private', repoSlug: 'me/priv' }),
+    repo({ id: 'metadata-private', visibility: 'public', repoSlug: 'me/metadata-private', github: {
+      description: null, language: null, stars: 0, topics: [], isPrivate: true, isFork: false, pushedAt: '', htmlUrl: '', fetchedAt: '',
+    } }),
+    repo({ id: 'unlisted-link', shelfId: 's3', virtual: true, path: '', visibility: 'internal' as never, linkUrl: 'https://example.test/unlisted' }),
     repo({ id: 'local', visibility: null }),
     repo({ id: 'arch', visibility: 'public', repoSlug: 'me/arch', archived: true }),
     repo({ id: 'hidden-link', shelfId: 's2', virtual: true, linkUrl: 'https://x' }),
@@ -71,6 +75,46 @@ describe('sanitizeForPublish', () => {
     expect(out.shelves.map((s) => s.label)).toEqual(['Work', 'Reads']);
     expect(out.shelves.every((s) => s.path === null)).toBe(true);
     expect(out.shelves[0].repoCount).toBe(1);
+  });
+
+  it.each(['missing', 'archived'] as const)('publishes the public fork when upstream is %s, recovering legacy collecting identity', (status) => {
+    const book = repo({
+      id: 'reference-id', name: 'renamed-copy', virtual: true, path: '', visibility: 'public',
+      owner: 'upstream', repoSlug: 'upstream/original', linkUrl: 'https://github.com/upstream/original',
+      catalog: { kind: 'reference-copy', upstream: 'upstream/original', commitsAhead: 0,
+        repoUrl: 'https://github.com/upstream/original', cardStale: false, verificationStatus: 'verified',
+        confidence: 'high', cardGeneratedAt: '', alive: true },
+      github: { description: null, language: 'Go', stars: 7, topics: [], isPrivate: false,
+        isFork: true, pushedAt: '2026-10-15T00:00:00Z', htmlUrl: 'https://github.com/upstream/original', fetchedAt: '',
+        upstream: { fullName: 'upstream/original', status, fetchedAt: '2026-10-16T00:00:00Z' } },
+    });
+    const published = sanitizeForPublish({ ...state, repos: [book] }, 'collector').repos[0];
+    expect(published).toMatchObject({ id: 'reference-id', name: 'renamed-copy', owner: 'collector',
+      repoSlug: 'collector/renamed-copy', linkUrl: 'https://github.com/collector/renamed-copy',
+      remoteUrl: 'https://github.com/collector/renamed-copy.git',
+      github: { fullName: 'collector/renamed-copy', stars: 7, htmlUrl: 'https://github.com/collector/renamed-copy' },
+      catalog: { kind: 'reference-copy', upstream: 'upstream/original', repoUrl: 'https://github.com/collector/renamed-copy' } });
+    expect(published.path).toBe('');
+    expect(published.dirtyCount).toBe(0);
+    expect(book.github!.fullName).toBeUndefined();
+  });
+
+  it('preserves upstream primary links for active public sources while retaining the public collecting fork identity', () => {
+    const book = repo({ name: 'renamed-copy', virtual: true, path: '', visibility: 'public', repoSlug: 'collector/renamed-copy',
+      catalog: { kind: 'reference-copy', upstream: 'upstream/original', commitsAhead: 0,
+        repoUrl: 'https://github.com/collector/renamed-copy', cardStale: false, verificationStatus: 'verified',
+        confidence: 'high', cardGeneratedAt: '', alive: true },
+      github: { description: null, language: 'Go', stars: 7, topics: [], isPrivate: false,
+        isFork: true, pushedAt: '', htmlUrl: '', fetchedAt: '', upstream: {
+          fullName: 'upstream/original', status: 'active', stars: 3000,
+          pushedAt: '2026-10-16T00:00:00Z', fetchedAt: '2026-10-16T01:00:00Z' } },
+    });
+    const published = sanitizeForPublish({ ...state, repos: [book] }, 'collector').repos[0];
+    expect(published.repoSlug).toBe('upstream/original');
+    expect(published.linkUrl).toBe('https://github.com/upstream/original');
+    expect(published.github!.htmlUrl).toBe('https://github.com/upstream/original');
+    expect(published.github!.fullName).toBe('collector/renamed-copy');
+    expect(published.github!.upstream).toEqual(book.github!.upstream);
   });
 });
 

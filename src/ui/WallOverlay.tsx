@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useShelf } from '../store';
 import { editionOf, languageOf, relativeTime, repoTitleOf } from '../derive';
-import { starCountOf } from '../repoFilters';
+import { starCountOf, updatedAtOf } from '../repoFilters';
 import { referenceUpstream } from '../repoIdentity';
 import { useWall, wallView } from '../scene/wallStore';
 import type { Repo } from '../types';
@@ -34,9 +34,14 @@ function purposeOf(repo: Repo): string {
 }
 
 function statusOf(repo: Repo): { alive: boolean; text: string } {
-  const pushed = relativeTime(repo.lastCommitAt);
-  if (repo.catalog) return { alive: repo.catalog.alive, text: `${repo.catalog.alive ? 'Alive' : 'Dormant'} · pushed ${pushed}` };
-  return { alive: repo.lastCommitAt !== null, text: repo.lastCommitAt ? `Last commit ${pushed}` : 'No commits yet' };
+  const updated = updatedAtOf(repo);
+  const pushed = relativeTime(updated);
+  if (repo.catalog) {
+    const alive = updated !== null && Date.now() - Date.parse(updated) <= 365 * 24 * 60 * 60 * 1000;
+    return { alive, text: updated ? `${alive ? 'Alive' : 'Dormant'} · updated ${pushed}` : 'Update date unavailable' };
+  }
+  if (repo.virtual) return { alive: updated !== null, text: updated ? `Updated ${pushed}` : 'Update date unavailable' };
+  return { alive: repo.lastCommitAt !== null, text: repo.lastCommitAt ? `Last commit ${relativeTime(repo.lastCommitAt)}` : 'No commits yet' };
 }
 
 export function announce(repo: Repo, shelfLabel: string | undefined): string {

@@ -425,6 +425,55 @@ test('list star ranking uses upstream counts for unchanged copies and own counts
   await expect(adapted.locator('.list-stars')).not.toContainText('90,000');
 });
 
+test('latest updated uses active source activity and the same date filter in both views', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-10-16T12:00:00Z'));
+  const fixture = structuredClone(forkData);
+  for (const repo of fixture.repos) {
+    const pushed = repo.name === 'a-renamed-alias' ? '2026-01-01T00:00:00Z'
+      : repo.name === 'z-fork-alias' ? '2026-10-14T00:00:00Z'
+        : repo.name === 'adapted-project' ? '2026-10-13T00:00:00Z' : '2026-10-12T00:00:00Z';
+    repo.lastCommitAt = pushed;
+    repo.github!.pushedAt = pushed;
+    repo.github!.fullName = `library-e2e/${repo.name}`;
+    repo.catalog!.alive = false;
+    if (repo.github?.upstream) {
+      repo.github.upstream.status = repo.name === 'z-fork-alias' ? 'archived' : 'active';
+      repo.github.upstream.pushedAt = repo.name === 'a-renamed-alias' ? '2026-10-15T00:00:00Z' : '2026-10-16T00:00:00Z';
+    }
+  }
+  await loadLibrary(page, fixture);
+  await page.getByRole('button', { name: 'List', exact: true }).click();
+  const sort = page.getByRole('combobox', { name: 'Sort by' });
+  await expect(sort.locator('option[value="updated"]')).toHaveText('Latest updated');
+  await sort.selectOption('updated');
+  await expect.poll(() => page.locator('.repo-list-row').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-repo-id')))).toEqual([
+    forkIds.get('a-renamed-alias'), forkIds.get('z-fork-alias'), forkIds.get('adapted-project'), forkIds.get('original-project'),
+  ]);
+  await expect(page.locator('.repo-list-row').first().locator('time')).toHaveAttribute('datetime', '2026-10-15T00:00:00.000Z');
+  await expect(page.locator('.repo-list-row').nth(1).locator('time')).toHaveAttribute('datetime', '2026-10-14T00:00:00.000Z');
+  await page.locator('.repo-list-row').first().click();
+  const panel = page.getByRole('dialog');
+  await expect(panel.locator('.tag-alive')).toHaveText('Alive');
+  await expect(panel.getByText('Last push', { exact: true }).locator('..').locator('dd')).toHaveAttribute('title', '2026-10-15T00:00:00.000Z');
+  await expect(panel.getByText('Status', { exact: true }).locator('..').locator('dd')).toHaveText('Alive, pushed within a year');
+  await expect(panel.locator('a.btn.primary')).toHaveAttribute('href', 'https://github.com/source-owner/original-project');
+  await page.keyboard.press('Escape');
+  await page.locator('.repo-list-row').nth(1).click();
+  await expect(panel.locator('a.btn.primary')).toHaveAttribute('href', 'https://github.com/library-e2e/z-fork-alias');
+  await expect(panel.locator('.attribution-upstream')).toHaveAttribute('href', 'https://github.com/source-owner/highest-project');
+  await page.keyboard.press('Escape');
+
+  await page.getByLabel('Updated since', { exact: true }).fill('2026-10-15');
+  await expect(page.locator('.repo-list-row')).toHaveCount(1);
+  await expect(page.locator('.repo-list-row')).toHaveAttribute('data-repo-id', forkIds.get('a-renamed-alias')!);
+  await expect(page.locator('.filter-result')).toHaveText('1 / 4 repos');
+  await page.getByRole('button', { name: '3D Library', exact: true }).click();
+  await expect.poll(() => indexNames(page)).toEqual(['a-renamed-alias']);
+  await expect.poll(async () => (await cullStats(page)).targetVisible).toBe(1);
+  await page.getByRole('button', { name: 'Clear updated date' }).click();
+  await expect.poll(() => indexNames(page)).toEqual(forkBooks.map((book) => book.name).sort());
+});
+
 test('3D reference shelf order and reversible star tiers use source popularity without moving shelf slots', async ({ page }) => {
   await loadLibrary(page, forkData);
   await expect.poll(() => page.evaluate(() => {

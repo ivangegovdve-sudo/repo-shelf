@@ -1,8 +1,8 @@
 import { languageOf } from './derive';
-import { starsOf } from './repoIdentity';
+import { primaryRepoName, primaryRepoSlug, starsOf, updatedAtOf } from './repoIdentity';
 import type { Repo } from './types';
 
-export { starCountOf, starsOf } from './repoIdentity';
+export { starCountOf, starsOf, updatedAtOf } from './repoIdentity';
 
 export interface RepoMetadataFilters {
   languageFilter: string;
@@ -11,14 +11,16 @@ export interface RepoMetadataFilters {
   updatedAfter: string;
 }
 
-/** Prefer GitHub's last push, falling back to the local last commit when unavailable. */
-export function updatedAtOf(repo: Repo): string | null {
-  for (const date of [repo.github?.pushedAt, repo.lastCommitAt]) {
-    if (!date) continue;
-    const time = Date.parse(date);
-    if (Number.isFinite(time)) return new Date(time).toISOString();
-  }
-  return null;
+/** Newest known push first, with undated books last and stable source-name ties. */
+export function compareLatestUpdated(a: Repo, b: Repo): number {
+  const aDate = updatedAtOf(a);
+  const bDate = updatedAtOf(b);
+  const aTime = aDate === null ? -Infinity : Date.parse(aDate);
+  const bTime = bDate === null ? -Infinity : Date.parse(bDate);
+  return bTime - aTime
+    || primaryRepoName(a).localeCompare(primaryRepoName(b))
+    || (primaryRepoSlug(a) ?? a.name).localeCompare(primaryRepoSlug(b) ?? b.name)
+    || a.id.localeCompare(b.id);
 }
 
 export function matchesRepoMetadata(repo: Repo, filters: RepoMetadataFilters): boolean {
