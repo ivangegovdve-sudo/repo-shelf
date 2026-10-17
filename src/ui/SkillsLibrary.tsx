@@ -82,8 +82,10 @@ export function SkillsLibrary() {
   const loadSkills = useShelf((s) => s.loadSkills);
   const deferredQuery = useDeferredValue(query);
   const [page, setPage] = useState(1);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const resultsHeading = useRef<HTMLHeadingElement>(null);
   const titleButtons = useRef(new Map<string, HTMLButtonElement>());
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const groups = useMemo(() => groupSkills(skills), [skills]);
   const sorted = useMemo(() => [...skills].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)), [skills]);
   const filtered = useMemo(() => filterSkills(sorted, { query: deferredQuery, category }), [sorted, deferredQuery, category]);
@@ -102,6 +104,10 @@ export function SkillsLibrary() {
 
   useEffect(() => setPage(1), [deferredQuery, category]);
 
+  useEffect(() => () => {
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+  }, []);
+
   const reset = () => {
     setQuery('');
     setCategory('all');
@@ -115,6 +121,33 @@ export function SkillsLibrary() {
   const closeSources = (id: string) => {
     selectSkill(null);
     titleButtons.current.get(id)?.focus({ preventScroll: true });
+  };
+  const copySourceLink = async (skill: SkillEntry) => {
+    const href = sourceHref(skill.locations[0]?.sourceUrl);
+    if (!href) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(href);
+      } else {
+        const input = document.createElement('textarea');
+        try {
+          input.value = href;
+          input.setAttribute('readonly', '');
+          input.style.position = 'fixed';
+          input.style.opacity = '0';
+          document.body.appendChild(input);
+          input.select();
+          if (!document.execCommand('copy')) throw new Error('copy failed');
+        } finally {
+          input.remove();
+        }
+      }
+      setCopiedId(skill.id);
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => setCopiedId(null), 1800);
+    } catch {
+      setCopiedId(null);
+    }
   };
 
   return (
@@ -220,6 +253,7 @@ export function SkillsLibrary() {
                           </div>
                           <div className="skill-entry-actions">
                             {href && <a href={href} target="_blank" rel="noopener noreferrer" aria-label={`View ${skill.name} source on GitHub`}>View source <SourceLinkIcon /></a>}
+                            {href && <button type="button" onClick={() => void copySourceLink(skill)} aria-label={`Copy ${skill.name} source link`}>{copiedId === skill.id ? 'Copied' : 'Copy link'}</button>}
                             <button type="button" aria-expanded={selected} aria-controls={selected ? sourceSectionId(skill) : undefined} aria-label={`${selected ? 'Hide' : 'Show'} ${skill.name} source locations`} onClick={() => selectSkill(selected ? null : skill.id)}>{selected ? 'Hide locations' : 'Source locations'} <span aria-hidden="true">{selected ? '−' : '+'}</span></button>
                           </div>
                         </div>

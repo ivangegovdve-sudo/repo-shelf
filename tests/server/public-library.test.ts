@@ -46,6 +46,32 @@ describe('public library catalog additions', () => {
     }
   });
 
+  it('rejects duplicate book ids and repository slugs in the canonical snapshot', async () => {
+    const root = await makeTempRoot('repo-shelf-public-library-duplicates-');
+    try {
+      await fs.mkdir(path.join(root, 'data'), { recursive: true });
+      await fs.writeFile(path.join(root, 'data', 'library.public.json'), JSON.stringify({
+        ...snapshot,
+        repos: [
+          { ...existing, path: '', dirtyCount: 0, visibility: 'public', repoSlug: 'collector/one' },
+          { ...existing, path: '', dirtyCount: 0, visibility: 'public', repoSlug: 'collector/two' },
+        ],
+      }));
+      await expect(readPublicLibrary(root)).rejects.toThrow(/duplicate book id/i);
+
+      await fs.writeFile(path.join(root, 'data', 'library.public.json'), JSON.stringify({
+        ...snapshot,
+        repos: [
+          { ...existing, path: '', dirtyCount: 0, visibility: 'public', repoSlug: 'collector/one' },
+          { ...existing, path: '', dirtyCount: 0, visibility: 'public', id: 'different-book', repoSlug: 'COLLECTOR/ONE' },
+        ],
+      }));
+      await expect(readPublicLibrary(root)).rejects.toThrow(/duplicate repository/i);
+    } finally {
+      await rm(root);
+    }
+  });
+
   it('applies newer verified authorship while preserving published cards and source-star caches', () => {
     const published = { ...existing, owner: 'upstream', repoSlug: 'upstream/original',
       catalog: { ...existing.catalog!, kind: 'reference-copy', commitsAhead: 0 },

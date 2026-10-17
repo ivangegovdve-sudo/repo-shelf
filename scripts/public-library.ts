@@ -4,9 +4,11 @@ import type { StaticShelfData } from '../server/publish.js';
 import type { AppState } from '../server/types.js';
 import type { SkillsIndex } from '../src/skills.js';
 
-/** This source was captured from the existing public Pages deployment, never from a private gh inventory. */
+export const PUBLIC_LIBRARY_PATH = 'data/library.public.json';
+
+/** The single canonical repo dataset for the public shelf, never a private gh inventory. */
 export async function readPublicLibrary(root: string): Promise<StaticShelfData> {
-  const data = JSON.parse(await fs.readFile(path.join(root, 'data', 'library.public.json'), 'utf8')) as StaticShelfData;
+  const data = JSON.parse(await fs.readFile(path.join(root, PUBLIC_LIBRARY_PATH), 'utf8')) as StaticShelfData;
   if (!Array.isArray(data.repos) || !data.repos.length || !Array.isArray(data.shelves)) {
     throw new Error('The public library snapshot is missing its books or shelves.');
   }
@@ -16,6 +18,15 @@ export async function readPublicLibrary(root: string): Promise<StaticShelfData> 
     || (repo.visibility != null && repo.visibility !== 'public') || repo.github?.isPrivate)
     || data.shelves.some((shelf) => shelf.path !== null || shelf.hidden)) {
     throw new Error('The public library source contains local or private data.');
+  }
+  const ids = new Set<string>();
+  const slugs = new Set<string>();
+  for (const repo of data.repos) {
+    if (!repo.id || ids.has(repo.id)) throw new Error(`The public library source contains a duplicate book id: ${repo.id || '(missing)'}.`);
+    ids.add(repo.id);
+    const slug = repo.repoSlug?.toLowerCase();
+    if (slug && slugs.has(slug)) throw new Error(`The public library source contains a duplicate repository: ${repo.repoSlug}.`);
+    if (slug) slugs.add(slug);
   }
   return data;
 }
