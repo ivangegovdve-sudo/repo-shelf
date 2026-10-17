@@ -61,7 +61,9 @@ jobs:
           path: dist-pages
       - name: Publish the existing GitHub Pages branch
         run: |
-          rsync -a --delete --exclude=.git dist-pages/ published/
+          # Compare content, not just size and mtime: an old Pages index can have
+          # the same metadata as a new build while pointing at different hashes.
+          rsync -a --checksum --delete --exclude=.git dist-pages/ published/
           git -C published config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git -C published config user.name "github-actions[bot]"
           git -C published add --all
