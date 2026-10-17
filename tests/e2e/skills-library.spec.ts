@@ -72,6 +72,10 @@ test('skills folders reflect category volume, filter and search public sources, 
   // An anonymous static fixture prevents external account refreshes from changing the test data.
   await page.addInitScript((embedded) => {
     (window as unknown as { __SHELF_STATIC: StaticShelfData }).__SHELF_STATIC = embedded;
+    (window as unknown as { __copiedSkillLink?: string }).__copiedSkillLink = '';
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      writeText: async (value: string) => { (window as unknown as { __copiedSkillLink: string }).__copiedSkillLink = value; },
+    } });
     localStorage.removeItem('repo-shelf.view');
   }, data);
   await page.goto('/');
@@ -112,6 +116,10 @@ test('skills folders reflect category volume, filter and search public sources, 
   await expect(skills.locator('.skill-entry-name')).toHaveText('Transcribe');
   await expect(skills.getByRole('link', { name: 'View Transcribe source on GitHub', exact: true }))
     .toHaveAttribute('href', `https://github.com/skills-e2e/audio-toolkit/blob/${COMMIT_SHA}/skills/transcribe/SKILL.md`);
+  await skills.getByRole('button', { name: 'Copy Transcribe source link', exact: true }).click();
+  await expect(skills.getByRole('button', { name: 'Copy Transcribe source link', exact: true })).toHaveText('Copied');
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __copiedSkillLink: string }).__copiedSkillLink))
+    .toBe(`https://github.com/skills-e2e/audio-toolkit/blob/${COMMIT_SHA}/skills/transcribe/SKILL.md`);
 
   // Search and folder selection intersect; looking in every folder restores the matching skill.
   await search.fill('Browser Check');

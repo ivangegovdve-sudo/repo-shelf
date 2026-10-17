@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeTempRoot, rm } from './helpers';
-import { buildStaticSite, publishSite, sanitizeForPublish, sanitizeSkillsForPublish } from '../../server/publish';
+import { buildStaticSite, publishSite, sanitizeForPublish, sanitizeSkillsForPublish, validateStaticBundle } from '../../server/publish';
 import { ActionError } from '../../server/actions';
 import type { AppState, Repo, Shelf } from '../../server/types';
 import type { Runner } from '../../server/git';
@@ -149,6 +149,13 @@ describe('buildStaticSite', () => {
     expect(fs.existsSync(path.join(out, 'assets', 'app.js'))).toBe(true);
     expect(fs.existsSync(path.join(out, 'server.cjs'))).toBe(false);
     expect(fs.existsSync(path.join(out, '.nojekyll'))).toBe(true);
+  });
+
+  it('rejects a stale partial build whose HTML references missing hashed assets', () => {
+    const broken = path.join(tmp, 'broken-dist');
+    fs.mkdirSync(broken, { recursive: true });
+    fs.writeFileSync(path.join(broken, 'index.html'), '<!doctype html><script type="module" src="./assets/index-old.js"></script>');
+    expect(() => validateStaticBundle(broken)).toThrow(/missing local assets/i);
   });
 
   it('does not fetch pages for catalog books, which carry their capability card instead', async () => {

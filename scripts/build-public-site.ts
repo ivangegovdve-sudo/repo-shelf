@@ -1,19 +1,22 @@
-import fs from 'node:fs/promises';
 import path from 'node:path';
-import { catalogToState, parseCatalog } from '../server/catalog.js';
 import { buildStaticSite } from '../server/publish.js';
 import { refreshPublicMetadata } from '../src/githubLive.js';
-import { publicLibraryState, readPublicLibrary, readPublicSkills } from './public-library.js';
+import type { AppState } from '../server/types.js';
+import { readPublicLibrary, readPublicSkills } from './public-library.js';
 import { refreshPublicUpstreams } from './github-upstream.js';
 
 async function main(): Promise<void> {
   const root = path.resolve(process.cwd());
-  // Preserve every deployed book, and keep public catalog refreshes able to add new ones.
+  // The checked-in public library is the one canonical repo dataset used by Pages.
+  // catalog.public.json is an updater input, not a second build-time shelf source.
   const snapshot = await readPublicLibrary(root);
   const skills = await readPublicSkills(root);
-  const document = parseCatalog(JSON.parse(await fs.readFile(path.join(root, 'data', 'catalog.public.json'), 'utf8')) as unknown);
-  const catalog = catalogToState(document);
-  const state = publicLibraryState(snapshot, catalog, document.generated_at);
+  const state: AppState = {
+    shelves: snapshot.shelves,
+    repos: snapshot.repos,
+    github: { available: false, login: snapshot.owner },
+    config: { staleAfterDays: 365 },
+  };
   if (process.env.SHELF_SKIP_GITHUB_REFRESH !== '1') {
     state.repos = await refreshPublicMetadata(state.repos, snapshot.owner);
     const upstreams = await refreshPublicUpstreams(state.repos);

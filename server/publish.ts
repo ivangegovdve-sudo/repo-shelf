@@ -191,11 +191,40 @@ async function copyDir(src: string, dest: string): Promise<void> {
   }
 }
 
+/** Fail closed when an HTML shell points at a stale or partial Vite build. */
+export function validateStaticBundle(dir: string): void {
+  const root = path.resolve(dir);
+  const indexFile = path.join(root, 'index.html');
+  if (!fssync.existsSync(indexFile)) {
+    throw new ActionError(500, 'no_static_build', `Static UI build not found at ${dir}. Run "npm run build:static".`);
+  }
+  const html = fssync.readFileSync(indexFile, 'utf8');
+  const missing: string[] = [];
+  for (const match of html.matchAll(/\b(?:src|href)\s*=\s*["']([^"']+)["']/gi)) {
+    const reference = match[1].split(/[?#]/, 1)[0];
+    if (!reference || reference.startsWith('#') || reference.startsWith('//') || /^[a-z][a-z\d+.-]*:/i.test(reference)) continue;
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(reference);
+    } catch {
+      missing.push(reference);
+      continue;
+    }
+    const target = path.resolve(root, decoded);
+    const relative = path.relative(root, target);
+    if (relative.startsWith('..') || path.isAbsolute(relative)
+      || !fssync.existsSync(target) || !fssync.statSync(target).isFile()) {
+      missing.push(reference);
+    }
+  }
+  if (missing.length) {
+    throw new ActionError(500, 'invalid_static_build', `Static build index references missing local assets: ${[...new Set(missing)].join(', ')}`);
+  }
+}
+
 /** Write a self-contained site: the built UI plus `shelf-data.js` that the app reads in static mode. */
 export async function buildStaticSite(state: AppState, opts: BuildOptions): Promise<{ dir: string; repos: number; shelves: number; withPages: number; skills: number }> {
-  if (!fssync.existsSync(path.join(opts.staticDist, 'index.html'))) {
-    throw new ActionError(500, 'no_static_build', `Static UI build not found at ${opts.staticDist}. Run "npm run build:static".`);
-  }
+  validateStaticBundle(opts.staticDist);
   const { shelves, repos } = sanitizeForPublish(state, opts.owner);
   if (repos.length === 0) throw new ActionError(400, 'nothing_public', 'No public repos to publish. Public GitHub repos and link shelves are included.');
   await fs.rm(opts.outDir, { recursive: true, force: true });
@@ -238,6 +267,7 @@ export async function buildStaticSite(state: AppState, opts: BuildOptions): Prom
   await fs.writeFile(indexFile, html, 'utf8');
   await fs.writeFile(path.join(opts.outDir, '.nojekyll'), '', 'utf8');
   await fs.writeFile(path.join(opts.outDir, 'README.md'), `# ${data.title}\n\nA 3D bookshelf of my public repos, published from [repo shelf](${PROJECT_URL}).\n`, 'utf8');
+  validateStaticBundle(opts.outDir);
   return { dir: opts.outDir, repos: repos.length, shelves: shelves.length, withPages: Object.keys(pages).length, skills: entries.length };
 }
 

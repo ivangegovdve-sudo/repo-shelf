@@ -1,9 +1,13 @@
 # Catalog data
 
-`catalog.public.json` contains the complete live public GitHub inventory, including
-archived projects. Private repositories never enter the public catalog. Existing
-capability-card summaries and curated topics are preserved. New repos use their
-GitHub descriptions and topics and are marked as having unverified cards.
+`library.public.json` is the single canonical public shelf dataset. It contains the
+complete live public GitHub inventory, including archived projects, with the safe
+published book state, attribution, cards, stars and shelf placement. Private
+repositories never enter it, and every book id and repository slug is unique.
+
+`catalog.public.json` is the refresh/authorship input used to update the canonical
+library; it is not read by the Pages build and is never merged into the shelf at
+publish time.
 
 Refresh with `GH_TOKEN` supplied in memory from a named GCP Secret Manager credential
 (never paste credentials into source or command arguments):
@@ -24,8 +28,7 @@ authorship evidence if only that comparison endpoint is unavailable. A push afte
 capability card's generation marks the card stale. Dates, language, stars and archive
 state are current.
 
-Run the library refresh after the catalog refresh to add newly discovered public
-repositories to `library.public.json`, the complete fallback used by the website.
+Run the library refresh after the catalog refresh to update `library.public.json`.
 It preserves published cards, pages, shelf placement and upstream attribution,
 applies newer authorship evidence, and hydrates source-repository stars and push dates
 for reference copies. An explicitly archived, missing, or non-public source switches
@@ -57,5 +60,6 @@ The first scan can make roughly one GitHub metadata/tree request per public sour
 After a source is confirmed public in the current run, it can retain a prior result
 if its tree request fails and marks that source partial. If GitHub cannot verify
 public visibility, the source is omitted until a later refresh confirms it again.
-`build:pages` re-sanitizes the sidecar against the published public books and
-writes it as a lazy `skills-index.json` asset.
+`build:pages` reads only `library.public.json` for repo books, re-sanitizes the
+sidecar against those published books, and writes it as a lazy `skills-index.json`
+asset.
