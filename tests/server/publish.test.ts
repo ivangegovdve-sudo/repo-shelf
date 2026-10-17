@@ -2,10 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeTempRoot, rm } from './helpers';
-import { buildStaticSite, publishSite, sanitizeForPublish } from '../../server/publish';
+import { buildStaticSite, publishSite, sanitizeForPublish, sanitizeSkillsForPublish } from '../../server/publish';
 import { ActionError } from '../../server/actions';
 import type { AppState, Repo, Shelf } from '../../server/types';
 import type { Runner } from '../../server/git';
+import type { SkillsIndex } from '../../src/skills';
 
 let tmp: string;
 beforeEach(async () => {
@@ -162,6 +163,59 @@ describe('buildStaticSite', () => {
     });
     expect(r.repos).toBe(3);
     expect(asked.sort()).toEqual(['link', 'pub']);
+  });
+
+  it('ships a deferred skills sidecar only for published public books', async () => {
+    const index: SkillsIndex = {
+      schemaVersion: 1, generatedAt: '2026-10-17T12:00:00.000Z', totalRepos: 3, scannedRepos: 3,
+      sources: [
+        { sourceSlug: 'me/pub', repoIds: ['pub', 'priv'], defaultBranch: 'main', commitSha: 'a'.repeat(40), treeSha: 'b'.repeat(40), scannedAt: '2026-10-17T12:00:00.000Z', status: 'complete', skills: [
+          { path: 'skills/publish/SKILL.md', blobSha: 'c'.repeat(40), bytes: 12, name: 'Publish', description: 'Publish safely', categoryId: 'developer-tools', metadata: 'path', sourceUrl: 'https://example.test/private' },
+        ] },
+        { sourceSlug: 'me/priv', repoIds: ['priv'], scannedAt: '2026-10-17T12:00:00.000Z', status: 'complete', skills: [{ path: 'SKILL.md', name: 'Private', description: 'Never publish', categoryId: 'security-privacy', metadata: 'path', sourceUrl: 'https://github.com/me/priv/blob/main/SKILL.md' }] },
+      ],
+    };
+    const out = path.join(tmp, 'site');
+    const r = await buildStaticSite(state, { staticDist: fakeDist(), outDir: out, owner: 'me', skills: index });
+    expect(r.skills).toBe(1);
+    const sidecar = JSON.parse(fs.readFileSync(path.join(out, 'skills-index.json'), 'utf8')) as SkillsIndex;
+    expect(sidecar.sources).toHaveLength(1);
+    expect(sidecar.sources[0]).toMatchObject({ sourceSlug: 'me/pub', repoIds: ['pub'] });
+    expect(sidecar.sources[0].skills[0].sourceUrl).toBe(`https://github.com/me/pub/blob/${'a'.repeat(40)}/skills/publish/SKILL.md`);
+    const embedded = fs.readFileSync(path.join(out, 'shelf-data.js'), 'utf8');
+    expect(embedded).toContain('"skills":{"url":"./skills-index.json"');
+    expect(embedded).not.toContain('Publish safely');
+    expect(JSON.stringify(sidecar)).not.toContain('Private');
+  });
+
+  it('derives source book membership from the published library rather than the input cache', () => {
+    const index: SkillsIndex = { schemaVersion: 1, generatedAt: '', totalRepos: 1, scannedRepos: 1, sources: [{
+      sourceSlug: 'me/pub', repoIds: ['priv'], scannedAt: '', status: 'complete', skills: [],
+    }] };
+    const safe = sanitizeSkillsForPublish(index, sanitizeForPublish(state, 'me').repos);
+    expect(safe.sources[0].repoIds).toEqual(['pub']);
+    expect(safe.totalRepos).toBe(2);
+  });
+
+  it('fails closed for malformed locations and coalesces duplicate source spellings', () => {
+    const raw = {
+      schemaVersion: 1, generatedAt: '2026-10-17T12:00:00.000Z', totalRepos: 1, scannedRepos: 1,
+      sources: [
+        { sourceSlug: ['me/pub'], repoIds: ['pub'], scannedAt: '2026-10-17T12:00:00.000Z', status: 'complete', skills: [] },
+        { sourceSlug: 'ME/PUB', repoIds: ['pub'], scannedAt: '2026-10-16T12:00:00.000Z', status: 'complete', skills: [] },
+        { sourceSlug: 'me/pub', repoIds: ['pub'], scannedAt: '2026-10-17T12:00:00.000Z', status: 'partial', skills: [{ path: 'skills/ok/SKILL.md', name: 'OK', description: '', categoryId: 'developer-tools', metadata: 'path', sourceUrl: '' }] },
+      ],
+    } as unknown as SkillsIndex;
+    const safe = sanitizeSkillsForPublish(raw, sanitizeForPublish(state, 'me').repos);
+    expect(safe.sources).toHaveLength(1);
+    expect(safe.sources[0]).toMatchObject({ sourceSlug: 'me/pub', status: 'partial' });
+
+    const malformedLocation = sanitizeSkillsForPublish({ ...raw, sources: [{
+      sourceSlug: 'me/pub', repoIds: ['pub'], scannedAt: '2026-10-17T12:00:00.000Z', status: 'complete',
+      skills: [{ path: 'skills/ok/SKILL.md', name: 'OK', description: '', categoryId: 'developer-tools', metadata: 'path', sourceUrl: '' }, { name: 'Missing path' }],
+    }] } as unknown as SkillsIndex, sanitizeForPublish(state, 'me').repos);
+    expect(malformedLocation.sources[0].status).toBe('partial');
+    expect(malformedLocation.sources[0].skills).toHaveLength(1);
   });
 
   it('refuses when nothing is public or the static build is missing', async () => {

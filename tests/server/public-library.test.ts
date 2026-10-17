@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { publicLibraryState, readPublicLibrary } from '../../scripts/public-library.js';
+import { publicLibraryState, readPublicLibrary, readPublicSkills } from '../../scripts/public-library.js';
 import type { StaticShelfData } from '../../server/publish.js';
 import type { AppState, Repo, Shelf } from '../../server/types.js';
 import { makeTempRoot, rm } from './helpers';
@@ -18,6 +18,20 @@ function catalog(repos: Repo[], shelves = [shelf]): AppState {
 }
 
 describe('public library catalog additions', () => {
+  it('reads an optional public skills sidecar and rejects an invalid envelope', async () => {
+    const root = await makeTempRoot('repo-shelf-public-skills-');
+    try {
+      await fs.mkdir(path.join(root, 'data'), { recursive: true });
+      await expect(readPublicSkills(root)).resolves.toBeNull();
+      await fs.writeFile(path.join(root, 'data', 'skills.public.json'), JSON.stringify({ schemaVersion: 1, sources: [] }));
+      await expect(readPublicSkills(root)).resolves.toMatchObject({ schemaVersion: 1, sources: [] });
+      await fs.writeFile(path.join(root, 'data', 'skills.public.json'), JSON.stringify({ schemaVersion: 2, sources: [] }));
+      await expect(readPublicSkills(root)).rejects.toThrow(/invalid schema/i);
+    } finally {
+      await rm(root);
+    }
+  });
+
   it('rejects any explicitly non-public visibility in the checked-in snapshot', async () => {
     const root = await makeTempRoot('repo-shelf-public-library-');
     try {

@@ -3,13 +3,14 @@ import path from 'node:path';
 import { catalogToState, parseCatalog } from '../server/catalog.js';
 import { buildStaticSite } from '../server/publish.js';
 import { refreshPublicMetadata } from '../src/githubLive.js';
-import { publicLibraryState, readPublicLibrary } from './public-library.js';
+import { publicLibraryState, readPublicLibrary, readPublicSkills } from './public-library.js';
 import { refreshPublicUpstreams } from './github-upstream.js';
 
 async function main(): Promise<void> {
   const root = path.resolve(process.cwd());
   // Preserve every deployed book, and keep public catalog refreshes able to add new ones.
   const snapshot = await readPublicLibrary(root);
+  const skills = await readPublicSkills(root);
   const document = parseCatalog(JSON.parse(await fs.readFile(path.join(root, 'data', 'catalog.public.json'), 'utf8')) as unknown);
   const catalog = catalogToState(document);
   const state = publicLibraryState(snapshot, catalog, document.generated_at);
@@ -25,8 +26,9 @@ async function main(): Promise<void> {
     owner: snapshot.owner,
     title: snapshot.title,
     pagesFor: async (repo) => snapshot.pages?.[repo.id] ?? null,
+    skills,
   });
-  console.log(`Built ${result.repos} books on ${result.shelves} purpose shelves in ${result.dir}`);
+  console.log(`Built ${result.repos} books on ${result.shelves} purpose shelves with ${result.skills} skills in ${result.dir}`);
 }
 
 void main().catch((error: unknown) => {

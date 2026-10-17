@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { StaticShelfData } from '../server/publish.js';
 import type { AppState } from '../server/types.js';
+import type { SkillsIndex } from '../src/skills.js';
 
 /** This source was captured from the existing public Pages deployment, never from a private gh inventory. */
 export async function readPublicLibrary(root: string): Promise<StaticShelfData> {
@@ -17,6 +18,23 @@ export async function readPublicLibrary(root: string): Promise<StaticShelfData> 
     throw new Error('The public library source contains local or private data.');
   }
   return data;
+}
+
+/** The optional sidecar is validated and sanitized again immediately before publication. */
+export async function readPublicSkills(root: string): Promise<SkillsIndex | null> {
+  const file = path.join(root, 'data', 'skills.public.json');
+  let value: unknown;
+  try {
+    value = JSON.parse(await fs.readFile(file, 'utf8'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw new Error('The public skills index could not be read safely.');
+  }
+  if (!value || typeof value !== 'object' || (value as { schemaVersion?: unknown }).schemaVersion !== 1
+    || !Array.isArray((value as { sources?: unknown }).sources)) {
+    throw new Error('The public skills index has an invalid schema.');
+  }
+  return value as SkillsIndex;
 }
 
 /** Append new public books and apply newer authorship evidence without replacing published cards or star caches. */

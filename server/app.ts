@@ -25,6 +25,7 @@ import { PagesCache, buildPages } from './pages.js';
 import { buildStaticSite, publishSite } from './publish.js';
 import { EventHub } from './events.js';
 import { loadCatalogFile, mergeCatalog } from './catalog.js';
+import type { SkillsIndex } from '../src/skills.js';
 
 export interface AppDeps {
   configFile: string;
@@ -40,6 +41,8 @@ export interface AppDeps {
   home?: string;
   /** Public repoindex snapshot. Catalog books are read-only virtual books. */
   catalogFile?: string;
+  /** Optional public-only SKILL.md path index for the local Skills section. */
+  skillsFile?: string;
 }
 
 export interface AppHandle {
@@ -68,6 +71,20 @@ function readDeleted(file: string): string[] {
   } catch {
     return [];
   }
+}
+
+function readSkillsIndex(file: string): SkillsIndex {
+  let value: unknown;
+  try {
+    value = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    throw new ActionError(500, 'skills_unavailable', 'The public skills index could not be read.');
+  }
+  if (!value || typeof value !== 'object' || (value as { schemaVersion?: unknown }).schemaVersion !== 1
+    || !Array.isArray((value as { sources?: unknown }).sources)) {
+    throw new ActionError(500, 'skills_unavailable', 'The public skills index is invalid.');
+  }
+  return value as SkillsIndex;
 }
 
 export async function createApp(deps: AppDeps): Promise<AppHandle> {
@@ -214,6 +231,16 @@ export async function createApp(deps: AppDeps): Promise<AppHandle> {
   api.get('/state', (_req, res) => {
     res.json(state());
   });
+
+  api.get(
+    '/skills',
+    wrap(async (_req, res) => {
+      if (!deps.skillsFile || !fs.existsSync(deps.skillsFile)) {
+        throw new ActionError(404, 'skills_missing', 'No public skills index has been built yet.');
+      }
+      res.json(readSkillsIndex(deps.skillsFile));
+    }),
+  );
 
   api.post(
     '/rescan',
@@ -427,13 +454,14 @@ export async function createApp(deps: AppDeps): Promise<AppHandle> {
   const exportsDir = deps.exportsDir ?? path.join(deps.cacheDir, 'exports');
   const staticDist = deps.staticDist ?? path.join(path.dirname(deps.cacheDir), 'dist-static');
   const pagesFor = (repo: Repo) => pagesCache.get(repo, () => buildPages(repo, runner, enricher.available()));
+  const publicSkills = (): SkillsIndex | null => deps.skillsFile && fs.existsSync(deps.skillsFile) ? readSkillsIndex(deps.skillsFile) : null;
 
   api.post(
     '/export',
     wrap(async (req, res) => {
       const includePages = req.body?.includePages !== false;
       const outDir = path.join(exportsDir, 'shelf-site');
-      const r = await buildStaticSite(state(), { staticDist, outDir, owner: enricher.login(), pagesFor: includePages ? pagesFor : undefined });
+      const r = await buildStaticSite(state(), { staticDist, outDir, owner: enricher.login(), pagesFor: includePages ? pagesFor : undefined, skills: publicSkills() });
       await appendAudit(auditFile, { action: 'export', repoId: '-', path: outDir, params: { includePages }, ok: true });
       res.json({ ok: true, ...r });
     }),
@@ -447,7 +475,7 @@ export async function createApp(deps: AppDeps): Promise<AppHandle> {
       const outDir = path.join(exportsDir, 'published', repoName || 'shelf');
       let result;
       try {
-        const built = await buildStaticSite(state(), { staticDist, outDir, owner: enricher.login(), pagesFor: includePages ? pagesFor : undefined });
+        const built = await buildStaticSite(state(), { staticDist, outDir, owner: enricher.login(), pagesFor: includePages ? pagesFor : undefined, skills: publicSkills() });
         result = { ...built, ...(await publishSite(outDir, enricher.login(), repoName, runner)) };
         await appendAudit(auditFile, { action: 'publish', repoId: '-', path: outDir, params: { repoName, includePages }, ok: true });
       } catch (err) {

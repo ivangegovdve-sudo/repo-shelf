@@ -12,6 +12,8 @@ export function Header() {
   const loaded = useShelf((s) => s.loaded);
   const githubAvailable = useShelf((s) => s.githubAvailable);
   const githubLogin = useShelf((s) => s.githubLogin);
+  const librarySection = useShelf((s) => s.librarySection);
+  const setLibrarySection = useShelf((s) => s.setLibrarySection);
   const openDialog = useShelf((s) => s.openDialog);
   const rescan = () => {
     void useShelf.getState().runAction('Rescanned all shelves', async () => {
@@ -30,6 +32,10 @@ export function Header() {
         </svg>
         <span className="wordmark">repo shelf.</span>
         {staticData() && <span className="hdr-title">{staticData()!.title}</span>}
+        <div className="library-section-toggle" aria-label="Library section">
+          <button type="button" aria-pressed={librarySection === 'repos'} onClick={() => setLibrarySection('repos')}>Repositories</button>
+          <button type="button" aria-pressed={librarySection === 'skills'} onClick={() => setLibrarySection('skills')}>Skills</button>
+        </div>
       </div>
       <nav className="hdr-nav">
         {isStaticSite() && (
