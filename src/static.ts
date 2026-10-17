@@ -1,4 +1,11 @@
 import type { AppState, Repo, RepoPages, Shelf } from './types';
+import type { SkillsMeta } from './skills';
+
+/** A deferred public-only skills index, loaded when the Skills section opens. */
+export interface StaticSkillsManifest {
+  url: string;
+  meta: SkillsMeta;
+}
 
 /** Data embedded in a published shelf page (see server/publish.ts). Present only on static sites. */
 export interface StaticShelfData {
@@ -9,6 +16,7 @@ export interface StaticShelfData {
   shelves: Shelf[];
   repos: Repo[];
   pages: Record<string, RepoPages>;
+  skills?: StaticSkillsManifest;
 }
 
 declare global {

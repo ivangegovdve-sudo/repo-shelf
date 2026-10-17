@@ -9,6 +9,7 @@ import { matchesRepoMetadata, starsOf } from './repoFilters';
 import { refreshPublicMetadata } from './githubLive';
 import { preserveNewerUpstreamCounts, refreshUpstreamStars } from './upstreamLive';
 import { attributedUpstream } from './repoIdentity';
+import { compileSkills, skillsMeta, type SkillEntry, type SkillsIndex, type SkillsMeta } from './skills';
 
 export type DialogKind = 'move' | 'rename' | 'mkdir' | 'shelves' | 'clone' | 'visibility' | 'delete' | 'create' | 'publish';
 
@@ -28,6 +29,7 @@ export interface Toast {
 
 export type CaseStyle = 'classic' | 'modern' | 'floating';
 export type ViewMode = '3d' | 'list';
+export type LibrarySection = 'repos' | 'skills';
 export const CASE_STYLES: { id: CaseStyle; name: string; description: string }[] = [
   { id: 'classic', name: 'Classic', description: 'Walnut case with crown, plinth and panelled back' },
   { id: 'modern', name: 'Modern', description: 'Painted case, flat back, no crown' },
@@ -64,6 +66,8 @@ export interface ShelfState {
   updatedAfter: string;
   minStars: number;
   viewMode: ViewMode;
+  /** The repository shelf and the compiled skills shelf deliberately keep independent filters. */
+  librarySection: LibrarySection;
   toggleCategory: (id: string) => void;
   toggleSubCategory: (id: string) => void;
   setLanguageFilter: (language: string) => void;
@@ -71,6 +75,20 @@ export interface ShelfState {
   setUpdatedAfter: (date: string) => void;
   setMinStars: (stars: number) => void;
   setViewMode: (view: ViewMode) => void;
+  setLibrarySection: (section: LibrarySection) => void;
+
+  skills: SkillEntry[];
+  skillsMeta: SkillsMeta | null;
+  skillsLoaded: boolean;
+  skillsLoading: boolean;
+  skillsError: string | null;
+  skillQuery: string;
+  skillCategory: string;
+  selectedSkillId: string | null;
+  loadSkills: () => Promise<void>;
+  setSkillQuery: (query: string) => void;
+  setSkillCategory: (category: string) => void;
+  selectSkill: (id: string | null) => void;
   selectedRepoId: string | null;
   hoveredRepoId: string | null;
   /** Keyboard focus on the wall: arrows move it, Enter opens it. */
@@ -119,6 +137,19 @@ export interface ShelfState {
 let toastSeq = 1;
 // React StrictMode boots twice in development; share the account inventory request.
 let publicRefresh: Promise<Repo[]> | null = null;
+// The static sidecar can be several megabytes, so only fetch it once per session.
+let skillsRefresh: Promise<SkillsIndex> | null = null;
+
+async function loadStaticSkills(url: string): Promise<SkillsIndex> {
+  const response = await fetch(url, { headers: { accept: 'application/json' } });
+  if (!response.ok) throw new Error(`The skills index could not be loaded (${response.status}).`);
+  const index: unknown = await response.json();
+  if (!index || typeof index !== 'object' || (index as { schemaVersion?: unknown }).schemaVersion !== 1
+    || !Array.isArray((index as { sources?: unknown }).sources)) {
+    throw new Error('The published skills index is invalid.');
+  }
+  return index as SkillsIndex;
+}
 
 function loadCaseStyle(): CaseStyle {
   try {
@@ -184,6 +215,7 @@ export const useShelf = create<ShelfState>()((set, get) => ({
   updatedAfter: '',
   minStars: 0,
   viewMode: loadViewMode(),
+  librarySection: 'repos',
   toggleCategory: (id) => set((st) => reconcileVisible(st, { categoryFilters: st.categoryFilters.includes(id) ? st.categoryFilters.filter((x) => x !== id) : [...st.categoryFilters, id] })),
   toggleSubCategory: (id) => set((st) => reconcileVisible(st, { subCategoryFilters: st.subCategoryFilters.includes(id) ? st.subCategoryFilters.filter((x) => x !== id) : [...st.subCategoryFilters, id] })),
   setLanguageFilter: (languageFilter) => set((st) => reconcileVisible(st, { languageFilter })),
@@ -198,6 +230,55 @@ export const useShelf = create<ShelfState>()((set, get) => ({
     }
     set({ viewMode, ...(viewMode === 'list' ? { rewindPlaying: false, timeline: null } : {}) });
   },
+  setLibrarySection(librarySection) {
+    if (librarySection === 'skills') {
+      set({ librarySection, selectedRepoId: null, hoveredRepoId: null, focusedRepoId: null, rewindPlaying: false, timeline: null });
+      void get().loadSkills();
+      return;
+    }
+    set({ librarySection });
+  },
+
+  skills: [],
+  skillsMeta: null,
+  skillsLoaded: false,
+  skillsLoading: false,
+  skillsError: null,
+  skillQuery: '',
+  skillCategory: 'all',
+  selectedSkillId: null,
+  async loadSkills() {
+    const state = get();
+    if (state.skillsLoaded || state.skillsLoading) return;
+    set({ skillsLoading: true, skillsError: null });
+    try {
+      const embedded = staticData();
+      let index: SkillsIndex;
+      if (embedded) {
+        const url = embedded.skills?.url;
+        if (!url) throw new Error('This published library does not have a skills index yet.');
+        skillsRefresh ??= loadStaticSkills(url);
+        index = await skillsRefresh;
+      } else {
+        index = await api.skills();
+      }
+      const entries = compileSkills(index);
+      set({
+        skills: entries,
+        skillsMeta: skillsMeta(index, entries),
+        skillsLoaded: true,
+        skillsLoading: false,
+        skillsError: null,
+      });
+    } catch (error) {
+      // A failed static fetch must be retryable if a deployment is still propagating.
+      skillsRefresh = null;
+      set({ skillsLoading: false, skillsError: error instanceof Error ? error.message : String(error) });
+    }
+  },
+  setSkillQuery: (skillQuery) => set({ skillQuery }),
+  setSkillCategory: (skillCategory) => set({ skillCategory }),
+  selectSkill: (selectedSkillId) => set({ selectedSkillId }),
   selectedRepoId: null,
   hoveredRepoId: null,
   focusedRepoId: null,
@@ -212,6 +293,7 @@ export const useShelf = create<ShelfState>()((set, get) => ({
   rewindPlaying: false,
   setTimeline: (timeline) => set({ timeline }),
   startRewind: () => {
+    get().setLibrarySection('repos');
     get().setViewMode('3d');
     set({ rewindPlaying: true, selectedRepoId: null, timeline: 0 });
   },

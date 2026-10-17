@@ -1,5 +1,6 @@
 import type { AppState, OpenTarget, Repo, RepoPages } from './types';
 import { staticData } from './static';
+import type { SkillsIndex } from './skills';
 
 export class ApiError extends Error {
   constructor(
@@ -51,6 +52,7 @@ export interface ActionResponse {
 
 export const api = {
   state: () => request<AppState>('/api/state'),
+  skills: () => request<SkillsIndex>('/api/skills'),
   rescan: (shelfId?: string) => post<{ shelves: AppState['shelves']; repos: Repo[] }>('/api/rescan', { shelfId }),
   move: (repoId: string, targetShelfId: string, force = false) =>
     post<ActionResponse>('/api/repo/move', { repoId, targetShelfId, force }),

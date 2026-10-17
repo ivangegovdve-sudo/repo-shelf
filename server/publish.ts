@@ -4,7 +4,8 @@ import path from 'node:path';
 import type { AppState, Repo, RepoPages, Shelf } from './types.js';
 import { execRunner, type Runner } from './git.js';
 import { ActionError } from './actions.js';
-import { attributedUpstream, isRepoSlug, ownRepoSlug, referenceUpstream } from '../src/repoIdentity.js';
+import { attributedUpstream, isRepoSlug, ownRepoSlug, primaryRepoSlug, referenceUpstream } from '../src/repoIdentity.js';
+import { compileSkills, inferSkillCategory, skillsMeta, type SkillSource, type SkillsIndex, type SkillsMeta } from '../src/skills.js';
 
 /** The data a published (static, read-only) shelf ships with. No paths, no private repos, no dirty state. */
 export interface StaticShelfData {
@@ -15,6 +16,8 @@ export interface StaticShelfData {
   shelves: Shelf[];
   repos: Repo[];
   pages: Record<string, RepoPages>;
+  /** Loaded only when someone opens the Skills section. */
+  skills?: { url: string; meta: SkillsMeta };
 }
 
 export const PROJECT_URL = 'https://github.com/ivangegovdve-sudo/repo-shelf';
@@ -65,6 +68,117 @@ export interface BuildOptions {
   title?: string;
   /** Resolve README/commits for a repo; omit to publish without pages. */
   pagesFor?: (repo: Repo) => Promise<RepoPages | null>;
+  /** A separately compiled, public-only SKILL.md path index. */
+  skills?: SkillsIndex | null;
+}
+
+const SHA_RE = /^(?:[a-f\d]{40}|[a-f\d]{64})$/i;
+
+function publicText(value: unknown, limit: number): string {
+  return typeof value === 'string'
+    ? value.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, limit)
+    : '';
+}
+
+function publicSkillPath(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 2048 && !/[\\\u0000-\u001f\u007f]/.test(value)
+    && value.split('/').every((part) => part && part !== '.' && part !== '..') && /(?:^|\/)skill\.md$/i.test(value);
+}
+
+function safeDate(value: unknown, fallback: string): string {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : fallback;
+}
+
+function sourceLink(slug: string, ref: string, file: string): string {
+  return `https://github.com/${slug}/blob/${encodeURIComponent(ref)}/${file.split('/').map(encodeURIComponent).join('/')}`;
+}
+
+function sourceEvidence(source: SkillSource): [number, number] {
+  const status = source.status === 'partial' ? 3 : source.status === 'complete' ? 2 : 1;
+  return [Number.isFinite(Date.parse(source.scannedAt)) ? Date.parse(source.scannedAt) : 0, status];
+}
+
+/**
+ * The extractor already works from public books, but publishing makes that boundary explicit again.
+ * It rewrites links from trusted source identity and never carries raw Markdown or unknown fields.
+ */
+export function sanitizeSkillsForPublish(index: SkillsIndex, repos: readonly Repo[]): SkillsIndex {
+  const publicIds = new Set(repos.map((repo) => repo.id));
+  const sourceBooks = new Map<string, string[]>();
+  for (const repo of repos) {
+    const slug = primaryRepoSlug(repo) ?? repo.repoSlug;
+    if (!slug || !isRepoSlug(slug)) continue;
+    const key = slug.toLowerCase();
+    const ids = sourceBooks.get(key) ?? [];
+    ids.push(repo.id);
+    sourceBooks.set(key, ids);
+  }
+  const generatedAt = safeDate(index?.generatedAt, new Date().toISOString());
+  // Old cache snapshots may contain two spellings of one source. Keep the most recent evidence;
+  // for ties, prefer an honest partial scan over a potentially stale complete scan.
+  const uniqueSources = new Map<string, SkillSource>();
+  for (const source of Array.isArray(index?.sources) ? index.sources : []) {
+    if (!source || typeof source.sourceSlug !== 'string' || !isRepoSlug(source.sourceSlug)) continue;
+    const key = source.sourceSlug.toLowerCase();
+    const previous = uniqueSources.get(key);
+    if (!previous) {
+      uniqueSources.set(key, source);
+      continue;
+    }
+    const [nextTime, nextStatus] = sourceEvidence(source);
+    const [previousTime, previousStatus] = sourceEvidence(previous);
+    if (nextTime > previousTime || (nextTime === previousTime && nextStatus > previousStatus)) uniqueSources.set(key, source);
+  }
+  const sources = [...uniqueSources.values()].flatMap((source) => {
+    const key = source.sourceSlug.toLowerCase();
+    const matchingBooks = sourceBooks.get(key);
+    if (!matchingBooks?.length) return [];
+    const defaultBranch = publicText(source.defaultBranch, 256);
+    const commitSha = typeof source.commitSha === 'string' && SHA_RE.test(source.commitSha) ? source.commitSha.toLowerCase() : undefined;
+    const treeSha = typeof source.treeSha === 'string' && SHA_RE.test(source.treeSha) ? source.treeSha.toLowerCase() : undefined;
+    const ref = commitSha ?? (defaultBranch || 'HEAD');
+    const sourceCategoryId = publicText(source.sourceCategoryId, 96) || undefined;
+    let malformedLocation = !Array.isArray(source.skills);
+    const locations = (Array.isArray(source.skills) ? source.skills : []).flatMap((skill) => {
+      if (!skill || !publicSkillPath(skill.path)) {
+        malformedLocation = true;
+        return [];
+      }
+      const name = publicText(skill.name, 160) || skill.path.split('/').slice(-2, -1)[0] || 'Skill';
+      const description = publicText(skill.description, 1200);
+      const categoryId = inferSkillCategory({ name, description, categoryId: publicText(skill.categoryId, 96) }, sourceCategoryId);
+      const blobSha = typeof skill.blobSha === 'string' && SHA_RE.test(skill.blobSha) ? skill.blobSha.toLowerCase() : undefined;
+      const bytes = typeof skill.bytes === 'number' && Number.isSafeInteger(skill.bytes) && skill.bytes >= 0 && skill.bytes <= 1_000_000_000
+        ? skill.bytes : undefined;
+      return [{
+        path: skill.path,
+        name,
+        description,
+        categoryId,
+        sourceUrl: sourceLink(source.sourceSlug, ref, skill.path),
+        metadata: skill.metadata === 'manifest' ? 'manifest' as const : 'path' as const,
+        ...(blobSha ? { blobSha } : {}),
+        ...(bytes !== undefined ? { bytes } : {}),
+        ...(skill.template === true ? { template: true } : {}),
+      }];
+    });
+    let status = source.status === 'complete' || source.status === 'partial' || source.status === 'unavailable' ? source.status : 'unavailable';
+    if (malformedLocation && status === 'complete') status = 'partial';
+    return [{
+      sourceSlug: source.sourceSlug,
+      // This is derived from the published books, rather than trusted from an input cache.
+      repoIds: [...new Set(matchingBooks.filter((id) => publicIds.has(id)))].sort(),
+      ...(sourceCategoryId ? { sourceCategoryId } : {}),
+      ...(defaultBranch ? { defaultBranch } : {}),
+      ...(commitSha ? { commitSha } : {}),
+      ...(treeSha ? { treeSha } : {}),
+      scannedAt: safeDate(source.scannedAt, generatedAt),
+      status,
+      skills: locations,
+    }];
+  }).sort((a, b) => a.sourceSlug.localeCompare(b.sourceSlug));
+  const scannedRepos = new Set(sources.filter((source) => source.status !== 'unavailable').flatMap((source) => source.repoIds)).size;
+  return { schemaVersion: 1, generatedAt, totalRepos: publicIds.size, scannedRepos, sources };
 }
 
 async function copyDir(src: string, dest: string): Promise<void> {
@@ -78,7 +192,7 @@ async function copyDir(src: string, dest: string): Promise<void> {
 }
 
 /** Write a self-contained site: the built UI plus `shelf-data.js` that the app reads in static mode. */
-export async function buildStaticSite(state: AppState, opts: BuildOptions): Promise<{ dir: string; repos: number; shelves: number; withPages: number }> {
+export async function buildStaticSite(state: AppState, opts: BuildOptions): Promise<{ dir: string; repos: number; shelves: number; withPages: number; skills: number }> {
   if (!fssync.existsSync(path.join(opts.staticDist, 'index.html'))) {
     throw new ActionError(500, 'no_static_build', `Static UI build not found at ${opts.staticDist}. Run "npm run build:static".`);
   }
@@ -101,6 +215,8 @@ export async function buildStaticSite(state: AppState, opts: BuildOptions): Prom
       }
     }
   }
+  const publicSkills = opts.skills ? sanitizeSkillsForPublish(opts.skills, repos) : null;
+  const entries = publicSkills ? compileSkills(publicSkills) : [];
   const data: StaticShelfData = {
     owner: opts.owner,
     title: opts.title ?? (opts.owner ? `${opts.owner}'s repo shelf` : 'repo shelf'),
@@ -109,7 +225,9 @@ export async function buildStaticSite(state: AppState, opts: BuildOptions): Prom
     shelves,
     repos,
     pages,
+    ...(publicSkills ? { skills: { url: './skills-index.json', meta: skillsMeta(publicSkills, entries) } } : {}),
   };
+  if (publicSkills) await fs.writeFile(path.join(opts.outDir, 'skills-index.json'), `${JSON.stringify(publicSkills)}\n`, 'utf8');
   const js = `window.__SHELF_STATIC = ${JSON.stringify(data)};\n`;
   await fs.writeFile(path.join(opts.outDir, 'shelf-data.js'), js, 'utf8');
   const indexFile = path.join(opts.outDir, 'index.html');
@@ -120,7 +238,7 @@ export async function buildStaticSite(state: AppState, opts: BuildOptions): Prom
   await fs.writeFile(indexFile, html, 'utf8');
   await fs.writeFile(path.join(opts.outDir, '.nojekyll'), '', 'utf8');
   await fs.writeFile(path.join(opts.outDir, 'README.md'), `# ${data.title}\n\nA 3D bookshelf of my public repos, published from [repo shelf](${PROJECT_URL}).\n`, 'utf8');
-  return { dir: opts.outDir, repos: repos.length, shelves: shelves.length, withPages: Object.keys(pages).length };
+  return { dir: opts.outDir, repos: repos.length, shelves: shelves.length, withPages: Object.keys(pages).length, skills: entries.length };
 }
 
 function escapeHtml(s: string): string {

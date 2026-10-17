@@ -11,6 +11,7 @@ import { RewindOverlay } from './ui/Rewind';
 import { WallOverlay } from './ui/WallOverlay';
 import { WallMap } from './ui/WallMap';
 import { RepoList } from './ui/RepoList';
+import { SkillsLibrary } from './ui/SkillsLibrary';
 import { staticData } from './static';
 import { useShallow } from 'zustand/react/shallow';
 import { selectVisibleRepos } from './store';
@@ -22,7 +23,8 @@ export function App() {
   const shelves = useShelf((s) => s.shelves);
   const repos = useShelf(useShallow(selectVisibleRepos));
   const busy = useShelf((s) => s.busy);
-  const hasSelection = useShelf((s) => s.selectedRepoId !== null);
+  const librarySection = useShelf((s) => s.librarySection);
+  const hasSelection = useShelf((s) => s.librarySection === 'repos' && s.selectedRepoId !== null);
   const viewMode = useShelf((s) => s.viewMode);
 
   useEffect(() => connectStore(), []);
@@ -37,7 +39,7 @@ export function App() {
       const tag = (e.target as HTMLElement)?.tagName;
       if (e.key !== 'Escape' || e.defaultPrevented || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       const st = useShelf.getState();
-      if (st.dialog || !st.selectedRepoId) return;
+      if (st.librarySection !== 'repos' || st.dialog || !st.selectedRepoId) return;
       e.preventDefault();
       st.select(null);
       e.stopImmediatePropagation();
@@ -64,9 +66,9 @@ export function App() {
   return (
     <div className={`app ${busy ? 'busy' : ''}`}>
       <Header />
-      <Controls />
-      <main className={`stage view-${viewMode} ${hasSelection ? 'with-page' : ''}`}>
-        {loadError ? (
+      {librarySection === 'repos' && <Controls />}
+      <main className={`stage ${librarySection === 'skills' ? 'skills-stage' : `view-${viewMode} ${hasSelection ? 'with-page' : ''}`}`}>
+        {librarySection === 'skills' ? <SkillsLibrary /> : loadError ? (
           <div className="empty">
             <h2>Cannot reach the server</h2>
             <p>{loadError}</p>
@@ -98,17 +100,19 @@ export function App() {
             </div>}
           </div>
         )}
-        <DetailPanel />
-        {/* visually hidden index: keyboard / screen-reader access to every book */}
-        <ul id="book-index" className="sr-only" aria-label="All repos">
-          {repos.map((r) => (
-            <li key={r.id}>
-              <button data-book={r.name} data-shelf={r.shelfId} data-subcategory={r.catalog?.subCategory} onClick={() => useShelf.getState().select(r.id)}>
-                {repoTitleOf(r)}{r.catalog ? ` — ${r.catalog.kind}${r.catalog.upstream ? `, upstream ${r.catalog.upstream}` : ''}` : ''}
-              </button>
-            </li>
-          ))}
-        </ul>
+        {librarySection === 'repos' && <>
+          <DetailPanel />
+          {/* visually hidden index: keyboard / screen-reader access to every book */}
+          <ul id="book-index" className="sr-only" aria-label="All repos">
+            {repos.map((r) => (
+              <li key={r.id}>
+                <button data-book={r.name} data-shelf={r.shelfId} data-subcategory={r.catalog?.subCategory} onClick={() => useShelf.getState().select(r.id)}>
+                  {repoTitleOf(r)}{r.catalog ? ` — ${r.catalog.kind}${r.catalog.upstream ? `, upstream ${r.catalog.upstream}` : ''}` : ''}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>}
       </main>
       <Dialogs />
       <Toasts />

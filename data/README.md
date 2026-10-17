@@ -37,3 +37,25 @@ adds catalog books to that build but does not persist them into the fallback sna
 `src/taxonomy.ts` defines six broad shelves and thirteen smaller purpose categories.
 The smaller purpose is derived from each card's summary/topics and stored on the
 book as `catalog.subCategory`, supplying consistent spine, cover and swatch colors.
+
+## Skills index
+
+`skills.public.json` is an optional, public-only sidecar built from the effective
+repository source for every public book. It verifies that each source is public,
+walks its default-branch Git tree for regular `SKILL.md` files, and writes only
+bounded path metadata, blob IDs, categories, and commit-pinned GitHub links. It
+never embeds skill bodies, credentials, local paths, or private repository names.
+
+Refresh it after the public library snapshot is current:
+
+```sh
+npm run skills:refresh
+npm run build:pages
+```
+
+The first scan can make roughly one GitHub metadata/tree request per public source.
+After a source is confirmed public in the current run, it can retain a prior result
+if its tree request fails and marks that source partial. If GitHub cannot verify
+public visibility, the source is omitted until a later refresh confirms it again.
+`build:pages` re-sanitizes the sidecar against the published public books and
+writes it as a lazy `skills-index.json` asset.
